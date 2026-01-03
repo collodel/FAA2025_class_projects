@@ -88,6 +88,11 @@ example :
   simp [TreapNode.all_keys]
   ext; simp; tauto
 
+/-
+  Treap properties
+
+-/
+
 -- BST property
 inductive IsBST : (TreapNode Key Prio) → Prop
   | nil : IsBST Tree.nil
@@ -124,18 +129,25 @@ structure Treap (Key : Type) (Prio : Type) [LinearOrder Key] [LinearOrder Prio] 
   is_treap : IsTreap root
 
 /-
-  Operation methods
+  Base methods
 
-  We define all operation methods on TreapNodes
-  Then we proceed to extend them to Treaps, and prove correctness there
+  We define all methods on TreapNodes, then migrate them to Treaps, proving their correctness there
 -/
 
--- Data operations
+-- TODO
+-- def TreapNode.fromList
+
+-- If the treap node is empty
 def TreapNode.isEmpty (tn : TreapNode Key Prio) : Bool :=
   match tn with
   | Tree.nil => true
   | _ => false
 
+-- Builder for singleton treap nodes
+def TreapNode.singleton (kp : KeyPrioPair Key Prio) : TreapNode Key Prio :=
+  Tree.node kp Tree.nil Tree.nil
+
+-- Get the leftmost key in the treap
 def TreapNode.leftmost (tn : TreapNode Key Prio) : Option Key :=
   match tn with
   | Tree.nil => none
@@ -162,6 +174,24 @@ def TreapNode.split (tn : TreapNode Key Prio) (k : Key) : TreapNode Key Prio × 
       let new_r := Tree.node kp split_r r
       (new_l, new_r)
 
+-- Helper to split the element with l ≤ k < r
+def TreapNode.splitUpper (tn : TreapNode Key Prio) (k : Key) : TreapNode Key Prio × TreapNode Key Prio :=
+  match tn with
+  | Tree.nil => (Tree.nil, Tree.nil)
+  | Tree.node kp l r =>
+    if kp.key ≤ k then
+      -- Root goes left, split right
+      let (split_l, new_r) := TreapNode.splitUpper r k
+      -- Return a (l, split_l) treap and a (new_r) treap
+      let new_l := Tree.node kp l split_l
+      (new_l, new_r)
+    else
+      -- Root goes right, split left
+      let (new_l, split_r) := TreapNode.splitUpper l k
+      -- Return (new_l) treap and (split_r, r) treap
+      let new_r := Tree.node kp split_r r
+      (new_l, new_r)
+
 -- Merge two sorted treaps
 def TreapNode.merge (l r : TreapNode Key Prio) : TreapNode Key Prio :=
   match l, r with
@@ -184,10 +214,6 @@ def TreapNode.merge (l r : TreapNode Key Prio) : TreapNode Key Prio :=
       let new_r := r_2
       Tree.node kp_2 new_l new_r
 
--- Builder for singleton treap nodes
-def TreapNode.singleton (kp : KeyPrioPair Key Prio) : TreapNode Key Prio :=
-  Tree.node kp Tree.nil Tree.nil
-
 /-
   Operations correctness
 
@@ -200,7 +226,7 @@ def TreapNode.singleton (kp : KeyPrioPair Key Prio) : TreapNode Key Prio :=
 -/
 
 -- All elems on the left are < all elems on the right
-lemma TreapNode.left_less_right (tn : TreapNode Key Prio) (bst_prop : IsBST tn) :
+lemma left_less_right (tn : TreapNode Key Prio) (bst_prop : IsBST tn) :
   ∀ lk ∈ tn.all_keys_left, ∀ rk ∈ tn.all_keys_right, lk < rk := by
   match tn with
   | Tree.nil => simp [TreapNode.all_keys_left]
@@ -210,26 +236,53 @@ lemma TreapNode.left_less_right (tn : TreapNode Key Prio) (bst_prop : IsBST tn) 
     cases bst_prop; rename_i bst_l left_l_key bst_r right_ge_key
     grind
 
--- TODO: these 2 theorems are a worse version of the subset one right after...
--- all_keys on left → all_keys on root
-lemma TreapNode.all_keys_left_imp_root (tn : TreapNode Key Prio) (k : Key) :
-  k ∈ tn.all_keys_left → k ∈ tn.all_keys := by
-  match tn with
-  | Tree.nil => simp [TreapNode.all_keys_left]
-  | Tree.node kp l r =>
-    unfold TreapNode.all_keys
-    unfold TreapNode.all_keys_left
-    simp_all only [Set.union_singleton, Set.mem_union, Set.mem_insert_iff, or_true, true_or, implies_true]
+-- Merging two treaps results in all keys being the union of both
+theorem all_keys_union_merge (l r : TreapNode Key Prio) :
+  l.all_keys ∪ r.all_keys = (TreapNode.merge l r).all_keys := by
+  fun_induction TreapNode.merge
+  · rw [Set.union_self]
+  · simp [TreapNode.all_keys]
+  · simp [TreapNode.all_keys]
+  · expose_names
+    simp only [TreapNode.all_keys]
+    rw [←ih1]
+    subst new_l -- delete alias
+    nth_rw 1 [TreapNode.all_keys]
+    nth_rw 2 [←Set.union_assoc]
+  · expose_names
+    simp only [TreapNode.all_keys]
+    rw [←ih1]
+    subst new_r -- delete alias
+    nth_rw 1 [TreapNode.all_keys]
+    repeat rw [←Set.union_assoc]
 
--- all_keys on right → all_keys on root
-lemma TreapNode.all_keys_right_imp_root (tn : TreapNode Key Prio) (k : Key) :
-  k ∈ tn.all_keys_right → k ∈ tn.all_keys := by
-  match tn with
-  | Tree.nil => simp [TreapNode.all_keys_right]
-  | Tree.node kp l r =>
-    unfold TreapNode.all_keys
-    unfold TreapNode.all_keys_right
-    simp_all only [Set.union_singleton, Set.mem_union, Set.mem_insert_iff, or_true, implies_true]
+-- Merging treaps merges the priorities too
+theorem all_prios_union_merge (l r : TreapNode Key Prio) :
+  l.all_prios ∪ r.all_prios = (TreapNode.merge l r).all_prios := by
+  -- match TreapNode.merge l r with -- lol you can do this
+  match l, r with
+  | Tree.nil, Tree.nil
+  | Tree.nil, Tree.node _ _ _
+  | Tree.node _ _ _, Tree.nil => simp_all [TreapNode.merge, TreapNode.all_prios]
+  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
+    -- simp_all [TreapNode.all_prios]
+    unfold TreapNode.merge
+    split_ifs <;> expose_names <;> simp_all
+    · simp_all [TreapNode.all_prios]
+      rw [← all_prios_union_merge r_1 (node kp_2 l_2 r_2)]
+      nth_rw 7 [TreapNode.all_prios.eq_def]
+      simp_all
+      rw [←
+        Set.union_assoc (insert kp_1.prio (TreapNode.all_prios l_1)) (TreapNode.all_prios r_1)
+          (insert kp_2.prio (TreapNode.all_prios l_2) ∪ TreapNode.all_prios r_2)]
+    · -- You can prove it only by rewriting expressions
+      nth_rw 3 [TreapNode.all_prios]
+      rw [← all_prios_union_merge (node kp_1 l_1 r_1) l_2]
+      rw [Set.union_assoc (TreapNode.all_prios (node kp_1 l_1 r_1)) (TreapNode.all_prios l_2)
+          {kp_2.prio}]
+      rw [Set.union_assoc (TreapNode.all_prios (node kp_1 l_1 r_1))
+          (TreapNode.all_prios l_2 ∪ {kp_2.prio}) (TreapNode.all_prios r_2)]
+      rw [← TreapNode.all_prios]
 
 -- All keys found on the left after a split were originally on the root
 theorem all_keys_subset_split_l (node : TreapNode Key Prio) (l : TreapNode Key Prio) (k : Key) :
@@ -304,27 +357,9 @@ theorem all_keys_subset_split_r (node : TreapNode Key Prio) (r : TreapNode Key P
       · aesop
       · aesop
 
--- Merging two treaps results in all keys being the union of both
-theorem all_keys_union_merge (l r : TreapNode Key Prio) : l.all_keys ∪ r.all_keys = (TreapNode.merge l r).all_keys := by
-  fun_induction TreapNode.merge
-  · rw [Set.union_self]
-  · simp [TreapNode.all_keys]
-  · simp [TreapNode.all_keys]
-  · expose_names
-    simp only [TreapNode.all_keys]
-    rw [←ih1]
-    subst new_l -- delete alias
-    nth_rw 1 [TreapNode.all_keys]
-    nth_rw 2 [←Set.union_assoc]
-  · expose_names
-    simp only [TreapNode.all_keys]
-    rw [←ih1]
-    subst new_r -- delete alias
-    nth_rw 1 [TreapNode.all_keys]
-    repeat rw [←Set.union_assoc]
-
 -- All priorities on the left of a split are a subset of the root priorities
-theorem all_prios_subset_split_l (node l : TreapNode Key Prio) (k : Key) : (TreapNode.split node k).1 = l → l.all_prios ⊆ node.all_prios := by
+theorem all_prios_subset_split_l (node l : TreapNode Key Prio) (k : Key) :
+  (TreapNode.split node k).1 = l → l.all_prios ⊆ node.all_prios := by
   intro hl; subst hl
   match node with
   | Tree.nil => simp_all [TreapNode.split]
@@ -340,7 +375,8 @@ theorem all_prios_subset_split_l (node l : TreapNode Key Prio) (k : Key) : (Trea
       exact all_prios_subset_split_l l (TreapNode.split l k).1 k (by simp)
 
 -- All priorities on the right of a split are a subset of the root priorities
-theorem all_prios_subset_split_r (node r : TreapNode Key Prio) (k : Key) : (TreapNode.split node k).2 = r → r.all_prios ⊆ node.all_prios := by
+theorem all_prios_subset_split_r (node r : TreapNode Key Prio) (k : Key) :
+  (TreapNode.split node k).2 = r → r.all_prios ⊆ node.all_prios := by
   intro hr; subst hr
   match node with
   | Tree.nil => simp_all [TreapNode.split]
@@ -354,36 +390,6 @@ theorem all_prios_subset_split_r (node r : TreapNode Key Prio) (k : Key) : (Trea
       simp_all only [Set.union_singleton, Set.union_subset_iff]
       suffices (TreapNode.split l k).2.all_prios ⊆ TreapNode.all_prios l by grind
       exact all_prios_subset_split_r l (TreapNode.split l k).2 k (by simp)
-
--- Merging treaps merges the priorities too
-theorem all_prios_union_merge (l r : TreapNode Key Prio) : l.all_prios ∪ r.all_prios = (TreapNode.merge l r).all_prios := by
-  -- match TreapNode.merge l r with -- lol you can do this
-  match l, r with
-  | Tree.nil, Tree.nil
-  | Tree.nil, Tree.node _ _ _
-  | Tree.node _ _ _, Tree.nil => simp_all [TreapNode.merge, TreapNode.all_prios]
-  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
-    -- simp_all [TreapNode.all_prios]
-    unfold TreapNode.merge
-    split_ifs <;> expose_names <;> simp_all
-    · simp_all [TreapNode.all_prios]
-      rw [← all_prios_union_merge r_1 (node kp_2 l_2 r_2)]
-      nth_rw 7 [TreapNode.all_prios.eq_def]
-      simp_all
-      rw [←
-        Set.union_assoc (insert kp_1.prio (TreapNode.all_prios l_1)) (TreapNode.all_prios r_1)
-          (insert kp_2.prio (TreapNode.all_prios l_2) ∪ TreapNode.all_prios r_2)]
-    · -- You can prove it only by rewriting expressions
-      nth_rw 3 [TreapNode.all_prios]
-      rw [← all_prios_union_merge (node kp_1 l_1 r_1) l_2]
-      rw [Set.union_assoc (TreapNode.all_prios (node kp_1 l_1 r_1)) (TreapNode.all_prios l_2)
-          {kp_2.prio}]
-      rw [Set.union_assoc (TreapNode.all_prios (node kp_1 l_1 r_1))
-          (TreapNode.all_prios l_2 ∪ {kp_2.prio}) (TreapNode.all_prios r_2)]
-      rw [← TreapNode.all_prios]
-
--- TODO: maybe you can prove Disj l r, and that keys are always preserved
--- a similar theorem with root will be needed too...
 
 -- All keys on the left of a split k are < k
 lemma split_left_less_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
@@ -451,6 +457,182 @@ lemma split_right_ge_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key)
       · rename_i le_h rk_h; revert rk_h rk -- reinsert into hypotheses
         grw [le_h]
         exact r_ge
+
+-- SplitUpper are copy-pasted and shamelessly adjusted
+-- All keys found on the left after a splitUpper were originally on the root
+theorem all_keys_subset_splitUpper_l (node : TreapNode Key Prio) (l : TreapNode Key Prio) (k : Key) :
+  (TreapNode.splitUpper node k).1 = l → l.all_keys ⊆ node.all_keys := by
+  match node with
+  | Tree.nil =>
+    -- Trivial case
+    intro h
+    subst h
+    simp_all [TreapNode.splitUpper, TreapNode.all_keys]
+  | Tree.node kp l r =>
+    -- Complex case
+    rw [TreapNode.splitUpper]
+    split_ifs <;> expose_names
+    · simp_all [TreapNode.all_keys]
+      -- Bring r to the left
+      rw [Set.insert_union]
+      rw [Set.union_comm]
+      rw [← Set.insert_union]
+
+      intro h kk hkk
+      subst h
+      simp_all [TreapNode.all_keys]
+
+      have splitUpper_in_r : TreapNode.all_keys (TreapNode.splitUpper r k).1 ⊆ TreapNode.all_keys r := by
+        apply all_keys_subset_splitUpper_l r (TreapNode.splitUpper r k).1 k
+        trivial
+
+      cases hkk
+      · aesop
+      · aesop
+
+    · simp_all [TreapNode.all_keys]
+      intro h
+
+      have all_in_l : TreapNode.all_keys l_1 ⊆ TreapNode.all_keys l := by
+        apply all_keys_subset_splitUpper_l l l_1
+        trivial
+
+      grind
+
+-- All keys found on the right after a splitUpper were originally on the root
+theorem all_keys_subset_splitUpper_r (node : TreapNode Key Prio) (r : TreapNode Key Prio) (k : Key) : (TreapNode.splitUpper node k).2 = r → r.all_keys ⊆ node.all_keys := by
+  match node with
+  | Tree.nil =>
+    -- Trivial case
+    intro h
+    subst h
+    simp_all [TreapNode.splitUpper, TreapNode.all_keys]
+  | Tree.node kp l r =>
+    -- Complex case
+    rw [TreapNode.splitUpper]
+    split_ifs <;> expose_names
+    · simp_all [TreapNode.all_keys]
+      intro hr
+
+      have all_in_r : TreapNode.all_keys r_1 ⊆ TreapNode.all_keys r := by
+        apply all_keys_subset_splitUpper_r r r_1
+        trivial
+
+      grind
+
+    · intro hh kk hkk
+      subst hh
+      simp_all [TreapNode.all_keys]
+
+      have splitUpper_in_l : TreapNode.all_keys (TreapNode.splitUpper l k).2 ⊆ TreapNode.all_keys l := by
+        apply all_keys_subset_splitUpper_r l (TreapNode.splitUpper l k).2 k
+        trivial
+
+      cases hkk
+      · aesop
+      · aesop
+
+-- All priorities on the left of a splitUpper are a subset of the root priorities
+theorem all_prios_subset_splitUpper_l (node l : TreapNode Key Prio) (k : Key) :
+  (TreapNode.splitUpper node k).1 = l → l.all_prios ⊆ node.all_prios := by
+  intro hl; subst hl
+  match node with
+  | Tree.nil => simp_all [TreapNode.splitUpper]
+  | Tree.node kp l r =>
+    simp_all [TreapNode.all_prios]
+    unfold TreapNode.splitUpper
+    split_ifs <;> expose_names <;> simp_all
+    · rw [TreapNode.all_prios]
+      simp_all only [Set.union_singleton, Set.union_subset_iff, Set.subset_union_left, true_and]
+      suffices (TreapNode.splitUpper r k).1.all_prios ⊆ TreapNode.all_prios r by grind
+      exact all_prios_subset_splitUpper_l r (TreapNode.splitUpper r k).1 k (by simp)
+    · suffices (TreapNode.splitUpper l k).1.all_prios ⊆ TreapNode.all_prios l by grind
+      exact all_prios_subset_splitUpper_l l (TreapNode.splitUpper l k).1 k (by simp)
+
+-- All priorities on the right of a splitUpper are a subset of the root priorities
+theorem all_prios_subset_splitUpper_r (node r : TreapNode Key Prio) (k : Key) :
+  (TreapNode.splitUpper node k).2 = r → r.all_prios ⊆ node.all_prios := by
+  intro hr; subst hr
+  match node with
+  | Tree.nil => simp_all [TreapNode.splitUpper]
+  | Tree.node kp l r =>
+    simp_all [TreapNode.all_prios]
+    unfold TreapNode.splitUpper
+    split_ifs <;> expose_names <;> simp_all
+    · suffices (TreapNode.splitUpper r k).2.all_prios ⊆ TreapNode.all_prios r by grind
+      exact all_prios_subset_splitUpper_r r (TreapNode.splitUpper r k).2 k (by simp)
+    · rw [TreapNode.all_prios]
+      simp_all only [Set.union_singleton, Set.union_subset_iff]
+      suffices (TreapNode.splitUpper l k).2.all_prios ⊆ TreapNode.all_prios l by grind
+      exact all_prios_subset_splitUpper_r l (TreapNode.splitUpper l k).2 k (by simp)
+
+-- All keys on the left of a splitUpper k are < k
+lemma splitUpper_left_le_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
+  let (splitUpper_l, _) := TreapNode.splitUpper tn k
+  ∀ lk, lk ∈ splitUpper_l.all_keys → lk ≤ k := by
+  match tn with
+  | Tree.nil =>
+    -- Trivial case
+    rw [TreapNode.splitUpper]
+    simp [TreapNode.all_keys]
+  | Tree.node kp l r =>
+    -- Complex case
+    rw [TreapNode.splitUpper]
+    -- Break down the IsBST proof
+    cases tn_proof; expose_names
+    split_ifs
+    · simp
+
+      have l_less : ∀ lk, lk ∈ (TreapNode.all_keys l) → lk < k := by
+        rename_i h_less
+        grw [←h_less]
+        -- By definition l < kp.key
+        exact h_1
+
+      have r_less : ∀ lk, lk ∈ (TreapNode.splitUpper r k).1.all_keys → lk ≤ k := by
+
+        -- Recursively, the splitUpperted part will be less than k
+        apply splitUpper_left_le_k
+        exact h_2
+
+      unfold TreapNode.all_keys
+      grind
+    · -- Apply recursion again
+      apply splitUpper_left_le_k
+      exact h
+
+-- All keys on the right of a splitUpper k are ≥ k
+lemma splitUpper_right_greater_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
+  let (_, splitUpper_r) := TreapNode.splitUpper tn k
+  ∀ rk, rk ∈ splitUpper_r.all_keys → k < rk := by
+  match tn with
+  | Tree.nil =>
+    -- Trivial case again
+    rw [TreapNode.splitUpper]
+    simp [TreapNode.all_keys]
+  | Tree.node kp l r =>
+    -- Complex one
+    rw [TreapNode.splitUpper]
+    -- Break down the IsBST proof
+    cases tn_proof; rename_i l_proof l_less r_proof r_ge
+    split_ifs <;> simp_all
+    · exact splitUpper_right_greater_k r r_proof k
+    · unfold TreapNode.all_keys
+      intro rk rk_h
+      -- Cover all cases (in left, as root, in right)
+      cases rk_h
+      · rename_i rk_h
+        cases rk_h
+        · rename_i le_h rk_h; revert rk_h rk
+          exact splitUpper_right_greater_k l l_proof k
+        · rename_i rk_h
+          rw [Set.mem_singleton_iff] at rk_h
+          rw [rk_h]
+          assumption
+      · rename_i le_h rk_h; revert rk_h rk -- reinsert into hypotheses
+        by_cases hc : k = kp.key
+        · simp_all
+        · grind
 
 -- TODO: maybe prove that merge of split is the same
 -- or split of merge
@@ -522,6 +704,79 @@ theorem split_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k :
 
     apply IsHeap.node
     · grw [all_prios_subset_split_r a new_r k]
+      · simp_all
+      · simp_all
+    · simp_all
+    · exact ih1
+    · simp_all
+
+/-
+  SplitUpper correctness
+-/
+
+-- Splitting creates a BST on the left
+theorem splitUpper_IsBST_left (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) : IsBST (TreapNode.splitUpper tn k).1 := by
+  fun_induction TreapNode.splitUpper
+  · exact IsBST.nil
+  · expose_names; cases tn_proof; expose_names
+    simp_all
+
+    apply IsBST.node
+    · simp_all
+    · grw [all_keys_subset_splitUpper_l a_1 split_l k]
+      exact h_5
+      · simp_all
+    · simp_all
+    · simp_all
+  · cases tn_proof
+    simp_all
+
+-- Splitting creates a BST on the right
+theorem splitUpper_IsBST_right (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) : IsBST (TreapNode.splitUpper tn k).2 := by
+  fun_induction TreapNode.splitUpper
+  · exact IsBST.nil
+  · cases tn_proof
+    simp_all
+  · expose_names; cases tn_proof; expose_names
+    simp_all
+
+    apply IsBST.node
+    · grw [all_keys_subset_splitUpper_r a new_r k]
+      exact h_3
+      · simp_all
+    · simp_all
+    · simp_all
+    · simp_all
+
+-- Splitting creates a Heap on the left
+theorem splitUpper_IsHeap_left (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) : IsHeap (TreapNode.splitUpper tn k).1 := by
+  fun_induction TreapNode.splitUpper
+  · exact IsHeap.nil
+  · expose_names; cases tn_proof; expose_names
+    simp_all
+
+    apply IsHeap.node
+    · simp_all
+    · simp_all
+      grw [all_prios_subset_splitUpper_l a_1 split_l k]
+      exact h_5
+      · simp_all
+    · simp_all
+    · simp_all
+  · cases tn_proof
+    simp_all
+
+-- Splitting creates a Heap on the right
+theorem splitUpper_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) : IsHeap (TreapNode.splitUpper tn k).2 := by
+  fun_induction TreapNode.splitUpper
+  · exact IsHeap.nil
+  · cases tn_proof
+    simp_all
+  · expose_names; cases tn_proof; expose_names
+    simp_all
+
+    apply IsHeap.node
+    · grw [all_prios_subset_splitUpper_r a new_r k]
       · simp_all
       · simp_all
     · simp_all
@@ -642,11 +897,16 @@ theorem merge_IsHeap (l r : TreapNode Key Prio)
         -- exact sorted_l_r
       · exact r_2_proof
 
--- Singleton is a treap
-def TreapNode.singleton_isBST (kp : KeyPrioPair Key Prio) : IsBST (TreapNode.singleton kp) := by
+/-
+  Singleton correctness
+-/
+
+-- Singleton is a BST
+theorem singleton_isBST (kp : KeyPrioPair Key Prio) : IsBST (TreapNode.singleton kp) := by
   apply IsBST.node <;> simp_all [TreapNode.all_keys, IsBST.nil]
 
-def TreapNode.singleton_isHeap (kp : KeyPrioPair Key Prio) : IsHeap (TreapNode.singleton kp) := by
+-- Singleton is a Heap
+theorem singleton_isHeap (kp : KeyPrioPair Key Prio) : IsHeap (TreapNode.singleton kp) := by
   apply IsHeap.node <;> simp_all [TreapNode.all_prios, IsHeap.nil]
 
 /-
@@ -676,32 +936,6 @@ def TreapNode.insert (tn : TreapNode Key Prio) (kp : KeyPrioPair Key Prio) : Tre
   let merged_right := TreapNode.merge new_node r -- First merge right (ensures l < r)
   TreapNode.merge l merged_right
 
--- Helper to split the element with l ≤ k < r
-def TreapNode.splitUpper (tn : TreapNode Key Prio) (k : Key) : TreapNode Key Prio × TreapNode Key Prio :=
-  match tn with
-  | Tree.nil => (Tree.nil, Tree.nil)
-  | Tree.node kp l r =>
-    if kp.key ≤ k then
-      -- Root goes left, split right
-      let (split_l, new_r) := TreapNode.splitUpper r k
-      -- Return a (l, split_l) treap and a (new_r) treap
-      let new_l := Tree.node kp l split_l
-      (new_l, new_r)
-    else
-      -- Root goes right, split left
-      let (new_l, split_r) := TreapNode.splitUpper l k
-      -- Return (new_l) treap and (split_r, r) treap
-      let new_r := Tree.node kp split_r r
-      (new_l, new_r)
-
-lemma splitUpper_left_less_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
-  let (split_l, _) := TreapNode.splitUpper tn k
-  ∀ lk, lk ∈ split_l.all_keys → lk ≤ k := by sorry
-
-lemma splitUpper_right_greater_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
-  let (_, split_r) := TreapNode.splitUpper tn k
-  ∀ rk, rk ∈ split_r.all_keys → k < rk := by sorry
-
 -- Delete operation, split the treap twice and merge the leftovers
 -- TODO: as for now, deletes all the occurrences of a key
 def TreapNode.delete (tn : TreapNode Key Prio) (k : Key) : TreapNode Key Prio :=
@@ -716,8 +950,8 @@ def TreapNode.delete (tn : TreapNode Key Prio) (k : Key) : TreapNode Key Prio :=
 
 def Treap.singleton (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
   let root := TreapNode.singleton kp
-  have singleton_bst_proof : IsBST root := TreapNode.singleton_isBST kp
-  have singleton_heap_proof : IsHeap root := TreapNode.singleton_isHeap kp
+  have singleton_bst_proof : IsBST root := singleton_isBST kp
+  have singleton_heap_proof : IsHeap root := singleton_isHeap kp
 
   have treap_proof : IsTreap root := by
     simp_all [IsTreap]
@@ -756,20 +990,18 @@ def Treap.splitUpper (t : Treap Key Prio) (k : Key) : Treap Key Prio × Treap Ke
   let split_res := t.root.splitUpper k
 
   -- Construct treap proofs for l and r
-  let l_bst_proof := split_IsBST_left t.root t.is_treap.2 k
-  let r_bst_proof := split_IsBST_right t.root t.is_treap.2 k
-  let l_heap_proof := split_IsHeap_left t.root t.is_treap.1 k
-  let r_heap_proof := split_IsHeap_right t.root t.is_treap.1 k
+  let l_bst_proof := splitUpper_IsBST_left t.root t.is_treap.2 k
+  let r_bst_proof := splitUpper_IsBST_right t.root t.is_treap.2 k
+  let l_heap_proof := splitUpper_IsHeap_left t.root t.is_treap.1 k
+  let r_heap_proof := splitUpper_IsHeap_right t.root t.is_treap.1 k
 
   have l_treap_proof : IsTreap split_res.1 := by
     subst split_res
     simp_all [IsTreap]
-    sorry
 
   have r_treap_proof : IsTreap split_res.2 := by
     subst split_res
     simp_all [IsTreap]
-    sorry
 
   let l_treap := { root := (t.root.splitUpper k).1, is_treap := l_treap_proof }
   let r_treap := { root := (t.root.splitUpper k).2, is_treap := r_treap_proof }
@@ -800,7 +1032,7 @@ def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Pr
 
   let split_key_r := t.splitUpper kp.key
   -- Save splitUpper proofs
-  have l_le_k := splitUpper_left_less_k t.root t.is_treap.2 kp.key
+  have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 kp.key
   have r_gt_k := splitUpper_right_greater_k t.root t.is_treap.2 kp.key
 
   let new_node := Treap.singleton kp
