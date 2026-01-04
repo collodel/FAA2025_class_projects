@@ -3,13 +3,17 @@
 Formalization of Analysis of Algorithms - ETH Zurich
 
 ## Checklist
-- [ ] Full implementation of Treap operations and correctness
-    - [ ] Basic definitions
-    - [ ] Split
-    - [ ] Merge
-    - [ ] Insert, delete, Build (optional)
+- [x] Full implementation of Treap operations and correctness
+    - [x] Basic definitions
+    - [x] Split
+    - [x] Merge
+    - [x] Insert, delete, Build (optional if you want)
 - [ ] Decide what to do with different or equal keys / prios
 - [ ] Time complexity of all operations, based on split/merge
+    - [x] Leftmost
+    - [x] Split
+    - [x] Merge
+    - [ ] Insert, delete, Build (optional)
 - [ ] RandomizedTreap, prove that expected height is O(log N)
 
 ## Quick Start

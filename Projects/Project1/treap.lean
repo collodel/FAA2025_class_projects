@@ -3,6 +3,8 @@
 
 -/
 
+import Projects.Project1.time
+
 import Mathlib
 import Mathlib.Tactic
 -- set_option diagnostics true
@@ -642,7 +644,8 @@ lemma splitUpper_right_greater_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn)
 -/
 
 -- Splitting creates a BST on the left
-theorem split_IsBST_left (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) : IsBST (TreapNode.split tn k).1 := by
+theorem split_IsBST_left (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
+  IsBST (TreapNode.split tn k).1 := by
   fun_induction TreapNode.split
   · exact IsBST.nil
   · expose_names; cases tn_proof; expose_names
@@ -659,7 +662,8 @@ theorem split_IsBST_left (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Ke
     simp_all
 
 -- Splitting creates a BST on the right
-theorem split_IsBST_right (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) : IsBST (TreapNode.split tn k).2 := by
+theorem split_IsBST_right (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
+  IsBST (TreapNode.split tn k).2 := by
   fun_induction TreapNode.split
   · exact IsBST.nil
   · cases tn_proof
@@ -676,7 +680,8 @@ theorem split_IsBST_right (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : K
     · simp_all
 
 -- Splitting creates a Heap on the left
-theorem split_IsHeap_left (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) : IsHeap (TreapNode.split tn k).1 := by
+theorem split_IsHeap_left (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) :
+  IsHeap (TreapNode.split tn k).1 := by
   fun_induction TreapNode.split
   · exact IsHeap.nil
   · expose_names; cases tn_proof; expose_names
@@ -694,7 +699,8 @@ theorem split_IsHeap_left (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : 
     simp_all
 
 -- Splitting creates a Heap on the right
-theorem split_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) : IsHeap (TreapNode.split tn k).2 := by
+theorem split_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) :
+  IsHeap (TreapNode.split tn k).2 := by
   fun_induction TreapNode.split
   · exact IsHeap.nil
   · cases tn_proof
@@ -715,7 +721,8 @@ theorem split_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k :
 -/
 
 -- Splitting creates a BST on the left
-theorem splitUpper_IsBST_left (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) : IsBST (TreapNode.splitUpper tn k).1 := by
+theorem splitUpper_IsBST_left (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
+  IsBST (TreapNode.splitUpper tn k).1 := by
   fun_induction TreapNode.splitUpper
   · exact IsBST.nil
   · expose_names; cases tn_proof; expose_names
@@ -732,7 +739,8 @@ theorem splitUpper_IsBST_left (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k
     simp_all
 
 -- Splitting creates a BST on the right
-theorem splitUpper_IsBST_right (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) : IsBST (TreapNode.splitUpper tn k).2 := by
+theorem splitUpper_IsBST_right (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
+  IsBST (TreapNode.splitUpper tn k).2 := by
   fun_induction TreapNode.splitUpper
   · exact IsBST.nil
   · cases tn_proof
@@ -749,7 +757,8 @@ theorem splitUpper_IsBST_right (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (
     · simp_all
 
 -- Splitting creates a Heap on the left
-theorem splitUpper_IsHeap_left (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) : IsHeap (TreapNode.splitUpper tn k).1 := by
+theorem splitUpper_IsHeap_left (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) :
+  IsHeap (TreapNode.splitUpper tn k).1 := by
   fun_induction TreapNode.splitUpper
   · exact IsHeap.nil
   · expose_names; cases tn_proof; expose_names
@@ -767,7 +776,8 @@ theorem splitUpper_IsHeap_left (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) 
     simp_all
 
 -- Splitting creates a Heap on the right
-theorem splitUpper_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) : IsHeap (TreapNode.splitUpper tn k).2 := by
+theorem splitUpper_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k : Key) :
+  IsHeap (TreapNode.splitUpper tn k).2 := by
   fun_induction TreapNode.splitUpper
   · exact IsHeap.nil
   · cases tn_proof
@@ -902,46 +912,50 @@ theorem merge_IsHeap (l r : TreapNode Key Prio)
 -/
 
 -- Singleton is a BST
-theorem singleton_isBST (kp : KeyPrioPair Key Prio) : IsBST (TreapNode.singleton kp) := by
+theorem singleton_isBST (kp : KeyPrioPair Key Prio) :
+  IsBST (TreapNode.singleton kp) := by
   apply IsBST.node <;> simp_all [TreapNode.all_keys, IsBST.nil]
 
 -- Singleton is a Heap
-theorem singleton_isHeap (kp : KeyPrioPair Key Prio) : IsHeap (TreapNode.singleton kp) := by
+theorem singleton_isHeap (kp : KeyPrioPair Key Prio) :
+  IsHeap (TreapNode.singleton kp) := by
   apply IsHeap.node <;> simp_all [TreapNode.all_prios, IsHeap.nil]
 
-/-
-  Composite operations
+-- /-
+--   Composite operations
 
-  We now define more operations on Treaps, and prove their correctness.
-  These operations will be:
-  - insert
-  - delete
-  - find
-  - build (TODO)
--/
+--   We now define more operations on Treaps, and prove their correctness.
+--   These operations will be:
+--   - find
+--   - insert
+--   - delete
+--   - build (TODO)
+-- -/
 
--- Find operation, split the treap and check leftmost of right treap
--- TODO: return the KeyPrioPair instead of Bool?
-def TreapNode.find (tn : TreapNode Key Prio) (k : Key) : Bool :=
-  let (_, r) := TreapNode.split tn k
-  if TreapNode.leftmost r = some k then
-    true
-  else
-    false
+-- -- Find operation, split the treap and check leftmost of right treap
+-- -- TODO: return the KeyPrioPair instead of Bool?
+-- def TreapNode.find (tn : TreapNode Key Prio) (k : Key) : Bool :=
+--   let (_, r) := TreapNode.split tn k
+--   if TreapNode.leftmost r = some k then
+--     true
+--   else
+--     false
 
--- Insert operation, split the treap and perform two merges
-def TreapNode.insert (tn : TreapNode Key Prio) (kp : KeyPrioPair Key Prio) : TreapNode Key Prio :=
-  let (l, r) := TreapNode.split tn kp.key
-  let new_node := Tree.node kp Tree.nil Tree.nil
-  let merged_right := TreapNode.merge new_node r -- First merge right (ensures l < r)
-  TreapNode.merge l merged_right
+-- -- Insert operation, split the treap and perform two merges
+-- def TreapNode.insert (tn : TreapNode Key Prio) (kp : KeyPrioPair Key Prio) : TreapNode Key Prio :=
+--   let (l, r) := TreapNode.split tn kp.key
+--   let new_node := Tree.node kp Tree.nil Tree.nil
+--   let merged_right := TreapNode.merge new_node r -- First merge right (ensures l < r)
+--   TreapNode.merge l merged_right
 
--- Delete operation, split the treap twice and merge the leftovers
--- TODO: as for now, deletes all the occurrences of a key
-def TreapNode.delete (tn : TreapNode Key Prio) (k : Key) : TreapNode Key Prio :=
-  let (l, _) := TreapNode.split tn k -- keep < k
-  let (_, r) := TreapNode.splitUpper tn k -- keep > k
-  TreapNode.merge l r
+-- -- Delete operation, split the treap twice and merge the leftovers
+-- -- TODO: as for now, deletes all the occurrences of a key
+-- def TreapNode.delete (tn : TreapNode Key Prio) (k : Key) : TreapNode Key Prio :=
+--   let (l, _) := TreapNode.split tn k -- keep < k
+--   let (_, r) := TreapNode.splitUpper tn k -- keep > k
+--   TreapNode.merge l r
+
+-- TODO: show that you have greatest as last element + smallest as first
 
 /-
   Treap operations (joint correctness and operation)
@@ -1021,7 +1035,11 @@ def Treap.merge (l r : Treap Key Prio) (sorted_l_r : ∀ kl ∈ l.root.all_keys,
 
 -- TODO: prove that it works only if the key is present?
 def Treap.find (t : Treap Key Prio) (k : Key) : Bool :=
-  TreapNode.find t.root k
+  let (_, r) := Treap.split t k
+  if Treap.leftmost r = some k then
+    true
+  else
+    false
 
 -- We discard other existing occurrences of the same key
 def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
@@ -1033,7 +1051,7 @@ def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Pr
   let split_key_r := t.splitUpper kp.key
   -- Save splitUpper proofs
   have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 kp.key
-  have r_gt_k := splitUpper_right_greater_k t.root t.is_treap.2 kp.key
+  have r_greater_k := splitUpper_right_greater_k t.root t.is_treap.2 kp.key
 
   let new_node := Treap.singleton kp
 
@@ -1043,7 +1061,7 @@ def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Pr
     subst split_key_r
     subst split_l_key
     simp_all [Treap.singleton, TreapNode.singleton, TreapNode.all_keys]
-    exact r_gt_k
+    exact r_greater_k
 
   let merged_right := Treap.merge new_node split_key_r.2 kp_less_r -- First merge right (ensures l < r)
 
@@ -1070,14 +1088,210 @@ def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Pr
 
   Treap.merge split_l_key.1 merged_right l_less_kp_r
 
+-- Deletes the key only if it exists
+def Treap.delete (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
+  let split_l_key := t.split kp.key
+  -- Save split proofs
+  have l_less_k := split_left_less_k t.root t.is_treap.2 kp.key
+  have r_ge_k := split_right_ge_k t.root t.is_treap.2 kp.key
+
+  let split_key_r := t.splitUpper kp.key
+  -- Save splitUpper proofs
+  have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 kp.key
+  have r_greater_k := splitUpper_right_greater_k t.root t.is_treap.2 kp.key
+
+  -- We need new_node < r
+  have l_less_r : (∀ kl ∈ TreapNode.all_keys split_l_key.1.root, ∀ kr ∈ TreapNode.all_keys split_key_r.2.root, kl < kr) := by
+    intro kl hkl kr hkr
+    trans kp.key
+    · revert kl hkl
+      assumption
+    · revert kr hkr
+      assumption
+
+  Treap.merge split_l_key.1 split_key_r.2 l_less_r
 
 /-
   Operations time complexity
 
 -/
 
+-- lenT with do notations
+def leftmostT (tn : TreapNode Key Prio) : TimeM (Option Key) := do
+  match tn with
+  | Tree.nil => return none
+  | Tree.node kp l _ =>
+    match l with
+    | Tree.nil => ✓ (some kp.key)
+    | Tree.node _ _ _ =>
+      let lm ← leftmostT l
+      ✓ lm
 
--- TODO...
+-- Prove the leftmostT has the same behavior as leftmost
+theorem leftmostT_correctness (tn : TreapNode Key Prio) : (leftmostT tn).ret = TreapNode.leftmost tn := by
+  match tn with
+  | Tree.nil =>
+    rfl
+  | Tree.node kp l r =>
+    match l with
+    | Tree.nil =>
+      rfl
+    | Tree.node kp' l' r' =>
+      unfold leftmostT
+      unfold TreapNode.leftmost
+      simp_all [bind, TimeM.tick, TimeM.ret_bind]
+      exact leftmostT_correctness (node kp' l' r')
+
+-- Prove the leftmostT is bounded by 1 + tn.height
+theorem leftmostT_time (tn : TreapNode Key Prio) : (leftmostT tn).time ≤ 1 + tn.height := by
+  match tn with
+  | Tree.nil =>
+    simp [leftmostT]
+  | Tree.node kp l _ =>
+    match l with
+    | Tree.nil =>
+      simp [leftmostT]
+    | Tree.node kp' l' r' =>
+      unfold leftmostT
+      simp_all [bind, TimeM.tick, TimeM.time_of_bind]
+      ring_nf
+      have root_proof : (leftmostT (node kp' l' r')).time ≤ 1 + (node kp' l' r').height := by
+        exact leftmostT_time (node kp' l' r')
+
+      grw [root_proof]
+      simp_all [Tree.height]
+      omega
+
+def splitT (tn : TreapNode Key Prio) (k : Key) : TimeM (TreapNode Key Prio × TreapNode Key Prio) := do
+  match tn with
+  | Tree.nil => return (Tree.nil, Tree.nil)
+  | Tree.node kp l r =>
+    if kp.key < k then
+      -- Root goes left, split right
+      let (split_l, new_r) ← splitT r k
+      -- Return a (l, split_l) treap and a (new_r) treap
+      let new_l := Tree.node kp l split_l
+      ✓ (new_l, new_r)
+    else
+      -- Root goes right, split left
+      let (new_l, split_r) ← splitT l k
+      -- Return (new_l) treap and (split_r, r) treap
+      let new_r := Tree.node kp split_r r
+      ✓ (new_l, new_r)
+
+-- Prove the splitT has the same behavior as leftmost
+theorem splitT_correctness (tn : TreapNode Key Prio) (k : Key) : (splitT tn k).ret = TreapNode.split tn k := by
+  match tn with
+  | Tree.nil =>
+    rfl
+  | Tree.node kp l r =>
+    simp only [TreapNode.split, splitT, bind, TimeM.tick]
+    split_ifs <;> simp [TimeM.ret_bind]
+    · constructor <;> rw [splitT_correctness]
+    · constructor <;> rw [splitT_correctness]
+
+-- Prove the splitT is bounded by 1 + tn.height
+theorem splitT_time (tn : TreapNode Key Prio) (k : Key) : (splitT tn k).time ≤ 1 + tn.height := by
+  match tn with
+  | Tree.nil =>
+    simp [splitT]
+  | Tree.node kp l r =>
+    simp only [splitT, bind, TimeM.tick]
+    split_ifs <;> simp [TimeM.time_of_bind]
+    · grw [splitT_time]
+      omega
+    · grw [splitT_time]
+      omega
+
+def splitUpperT (tn : TreapNode Key Prio) (k : Key) : TimeM (TreapNode Key Prio × TreapNode Key Prio) := do
+  match tn with
+  | Tree.nil => return (Tree.nil, Tree.nil)
+  | Tree.node kp l r =>
+    if kp.key ≤ k then
+      -- Root goes left, splitUpper right
+      let (splitUpper_l, new_r) ← splitUpperT r k
+      -- Return a (l, splitUpper_l) treap and a (new_r) treap
+      let new_l := Tree.node kp l splitUpper_l
+      ✓ (new_l, new_r)
+    else
+      -- Root goes right, splitUpper left
+      let (new_l, splitUpper_r) ← splitUpperT l k
+      -- Return (new_l) treap and (splitUpper_r, r) treap
+      let new_r := Tree.node kp splitUpper_r r
+      ✓ (new_l, new_r)
+
+-- Prove the splitUpperT has the same behavior as leftmost
+theorem splitUpperT_correctness (tn : TreapNode Key Prio) (k : Key) : (splitUpperT tn k).ret = TreapNode.splitUpper tn k := by
+  match tn with
+  | Tree.nil =>
+    rfl
+  | Tree.node kp l r =>
+    simp only [TreapNode.splitUpper, splitUpperT, bind, TimeM.tick]
+    split_ifs <;> simp [TimeM.ret_bind]
+    · constructor <;> rw [splitUpperT_correctness]
+    · constructor <;> rw [splitUpperT_correctness]
+
+-- Prove the splitUpperT is bounded by 1 + tn.height
+theorem splitUpperT_time (tn : TreapNode Key Prio) (k : Key) : (splitUpperT tn k).time ≤ 1 + tn.height := by
+  match tn with
+  | Tree.nil =>
+    simp [splitUpperT]
+  | Tree.node kp l r =>
+    simp only [splitUpperT, bind, TimeM.tick]
+    split_ifs <;> simp [TimeM.time_of_bind]
+    · grw [splitUpperT_time]
+      omega
+    · grw [splitUpperT_time]
+      omega
+
+def mergeT (l r : TreapNode Key Prio) : TimeM (TreapNode Key Prio) := do
+  match l, r with
+  | Tree.nil, Tree.nil => return Tree.nil
+  | Tree.nil, Tree.node _ _ _ => ✓ r
+  | Tree.node _ _ _, Tree.nil => ✓ l
+  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
+    -- We have to choose the root, use priorities
+    if kp_1.prio ≥ kp_2.prio then
+      -- Left goes as root
+      let new_l := l_1
+      let new_r ← mergeT r_1 (Tree.node kp_2 l_2 r_2)
+      ✓ (Tree.node kp_1 new_l new_r)
+    else
+      -- Right as root
+      let new_l ← mergeT (Tree.node kp_1 l_1 r_1) l_2
+      let new_r := r_2
+      ✓ (Tree.node kp_2 new_l new_r)
+
+-- Prove the mergeT has the same behavior as leftmost
+theorem mergeT_correctness (l r : TreapNode Key Prio) : (mergeT l r).ret = TreapNode.merge l r := by
+  match l, r with
+  | Tree.nil, Tree.nil
+  | Tree.nil, Tree.node _ _ _
+  | Tree.node _ _ _, Tree.nil => simp [mergeT, TreapNode.merge]
+  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
+    simp_all [mergeT, TreapNode.merge, bind, TimeM.tick]
+    split_ifs <;> simp [TimeM.ret_bind]
+    · exact mergeT_correctness r_1 (node kp_2 l_2 r_2)
+    · exact mergeT_correctness (node kp_1 l_1 r_1) l_2
+
+-- Prove the mergeT is bounded by sum of heights
+-- TODO: max 1 + l.height r.height
+theorem mergeT_time (l r : TreapNode Key Prio) (k : Key) : (mergeT l r).time ≤ l.height + r.height := by
+  match l, r with
+  | Tree.nil, Tree.nil
+  | Tree.nil, Tree.node _ _ _
+  | Tree.node _ _ _, Tree.nil => simp [mergeT]
+  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
+    simp_all [mergeT, bind, TimeM.tick]
+    split_ifs <;> simp [TimeM.time_of_bind]
+    · grw [mergeT_time r_1 (node kp_2 l_2 r_2) k]
+      simp only [height]
+      ring_nf
+      omega
+    · grw [mergeT_time (node kp_1 l_1 r_1) l_2 k]
+      simp only [height]
+      ring_nf
+      omega
 
 /-
   Randomness (oh shet)
