@@ -7,6 +7,7 @@ import Projects.Project1.time
 
 import Mathlib
 import Mathlib.Tactic
+-- import Mathlib.Algebra.BigOperators -- for ∑ (TODO: List or Finset)
 -- set_option diagnostics true
 
 namespace TreapLogic
@@ -150,12 +151,12 @@ def TreapNode.singleton (kp : KeyPrioPair Key Prio) : TreapNode Key Prio :=
   Tree.node kp Tree.nil Tree.nil
 
 -- Get the leftmost key in the treap
-def TreapNode.leftmost (tn : TreapNode Key Prio) : Option Key :=
+def TreapNode.leftmost (tn : TreapNode Key Prio) : Option (KeyPrioPair Key Prio) :=
   match tn with
   | Tree.nil => none
   | Tree.node kp l _ =>
     match l with
-    | Tree.nil => some kp.key
+    | Tree.nil => some kp
     | Tree.node _ _ _ => TreapNode.leftmost l
 
 -- Cartesian product to return pair of values
@@ -962,6 +963,11 @@ theorem singleton_isHeap (kp : KeyPrioPair Key Prio) :
 
 -/
 
+def Treap.empty : Treap Key Prio :=
+  { root := Tree.nil,
+    is_treap := by
+      simp [IsTreap, IsBST.nil, IsHeap.nil] }
+
 def Treap.singleton (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
   let root := TreapNode.singleton kp
   have singleton_bst_proof : IsBST root := singleton_isBST kp
@@ -973,7 +979,7 @@ def Treap.singleton (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
   { root := root, is_treap := treap_proof }
 
 -- Leftmost doesn't need correctness proofs (TODO: maybe only that it's the smallest element...), doesn't produce treaps
-def Treap.leftmost (t : Treap Key Prio) : Option Key :=
+def Treap.leftmost (t : Treap Key Prio) : Option (KeyPrioPair Key Prio) :=
   -- Transfer the call
   TreapNode.leftmost t.root
 
@@ -1034,12 +1040,15 @@ def Treap.merge (l r : Treap Key Prio) (sorted_l_r : ∀ kl ∈ l.root.all_keys,
   { root := root_merged, is_treap := treap_proof }
 
 -- TODO: prove that it works only if the key is present?
-def Treap.find (t : Treap Key Prio) (k : Key) : Bool :=
+def Treap.find (t : Treap Key Prio) (k : Key) : Option (KeyPrioPair Key Prio) :=
   let (_, r) := Treap.split t k
-  if Treap.leftmost r = some k then
-    true
-  else
-    false
+  match Treap.leftmost r with
+  | some kp =>
+    if kp.key = k then
+      some kp
+    else
+      none
+  | none => none
 
 -- We discard other existing occurrences of the same key
 def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
@@ -1117,12 +1126,12 @@ def Treap.delete (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Pr
 -/
 
 -- lenT with do notations
-def leftmostT (tn : TreapNode Key Prio) : TimeM (Option Key) := do
+def leftmostT (tn : TreapNode Key Prio) : TimeM (Option (KeyPrioPair Key Prio)) := do
   match tn with
   | Tree.nil => return none
   | Tree.node kp l _ =>
     match l with
-    | Tree.nil => ✓ (some kp.key)
+    | Tree.nil => ✓ (some kp)
     | Tree.node _ _ _ =>
       let lm ← leftmostT l
       ✓ lm
@@ -1293,14 +1302,89 @@ theorem mergeT_time (l r : TreapNode Key Prio) (k : Key) : (mergeT l r).time ≤
       ring_nf
       omega
 
-/-
-  Randomness (oh shet)
+-- TODO: TreapNode.insert + TreapNode.delete
+-- TODO: their time complexity
 
+
+
+
+
+
+/-
+  RandomTreap
+
+  Augment the Treap to use uniformly random priorities, prove that height is bounded by O(log(N))
 -/
+
+
+--
+
+
+-- Define is_ancestor of a node
+def is_ancestor (ancestor descendant : TreapNode Key Prio) : Prop :=
+  match ancestor with
+  | Tree.nil => false
+  | Tree.node _ l r =>
+    descendant = ancestor ∨ is_ancestor l descendant ∨ is_ancestor r descendant
+
+-- Show you only need to look right if ancestor.key < descendant.key (TODO)
+
+
+-- Show that depth is ≤ height
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- TODO: also uniqueness?
 
 /-
   Merge and Split are inverse
-  whattodo
+  whattodo -- do i need this? also, treap that has only different priorities, do I need it??
 -/
 -- theorem merge_inv_split_left (k : Key) (kp : KeyPrioPair Key Prio) (l' r' : Tree (KeyPrioPair Key Prio)) (h : kp.key < k) :
 --   node kp l' r' = TreapNode.merge (node kp l' (TreapNode.split r' k).1) (TreapNode.split r' k).2 := by
@@ -1585,30 +1669,6 @@ theorem merge_inv_split (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key
     --   --   sorry
     --   -- · sorry
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 -- /-
 --   Aliases for Tree functions in treaps
 --   TODO: decide if you want these
@@ -1625,6 +1685,51 @@ theorem merge_inv_split (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key
   Treap proofs
 
 -/
+
+
+
+
+/-
+  Empirical test
+
+-/
+
+def main : IO Unit := do
+  let mut t : Treap ℕ ℕ := Treap.empty
+  let n_elems := 1000000
+
+  for i in [1 : n_elems] do
+    let rand_prio ← IO.rand 0 1000000000
+    t := t.insert { key := i, prio := rand_prio }
+
+  IO.println s!"Done inserting {n_elems} elements."
+
+  let h := t.root.height
+
+  IO.println s!"Final Height after insertion: {h}"
+
+  -- Compare with expected height
+  let expected := 3 * Float.log2 n_elems.toFloat
+  IO.println s!"Expected Height (approx): {expected}"
+
+  -- Remove half elements
+  for i in [n_elems / 4 : n_elems / 4 + n_elems / 2] do
+    let kp := t.find i
+    match kp with
+    | none => continue
+    | some kp => do
+      t := t.delete kp
+
+  let h := t.root.height
+
+  IO.println s!"Final Height after removing half elements: {h}"
+
+  -- Compare with expected height
+  let expected := 3 * Float.log2 n_elems.toFloat
+  IO.println s!"Expected Height (approx): {expected}"
+
+
+#eval main
 
 
 end TreapLogic
