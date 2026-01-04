@@ -1725,11 +1725,11 @@ def main : IO Unit := do
   IO.println s!"Final Height after removing half elements: {h}"
 
   -- Compare with expected height
-  let expected := 3 * Float.log2 n_elems.toFloat
+  let expected := 3 * Float.log2 (n_elems / 2).toFloat
   IO.println s!"Expected Height (approx): {expected}"
 
 
-#eval main
+-- #eval main
 
 
 end TreapLogic
