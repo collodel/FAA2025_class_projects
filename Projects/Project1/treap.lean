@@ -7,6 +7,11 @@ import Projects.Project1.time
 
 import Mathlib
 import Mathlib.Tactic
+import Mathlib.Data.Fintype.Perm
+import Mathlib.Data.Real.Basic
+import Mathlib.Logic.Equiv.Defs
+import Mathlib.Data.Fintype.BigOperators
+
 -- import Mathlib.Algebra.BigOperators -- for ∑ (TODO: List or Finset)
 -- set_option diagnostics true
 
@@ -1316,35 +1321,104 @@ theorem mergeT_time (l r : TreapNode Key Prio) (k : Key) : (mergeT l r).time ≤
   Augment the Treap to use uniformly random priorities, prove that height is bounded by O(log(N))
 -/
 
+/-
 
---
-
-
--- Define is_ancestor of a node
-def is_ancestor (ancestor descendant : TreapNode Key Prio) : Prop :=
-  match ancestor with
-  | Tree.nil => false
-  | Tree.node _ l r =>
-    descendant = ancestor ∨ is_ancestor l descendant ∨ is_ancestor r descendant
-
--- Show you only need to look right if ancestor.key < descendant.key (TODO)
-
-
--- Show that depth is ≤ height
+  1. Define rank of a node
+  2. Define ancestor relation based on priorities (try to avoid using keys)
+  3. Define Dᵢ as the depth of the i-th node based on ancestorship
+  4. Assign priorities as a function (random permutation) of ranks [implement σ]
+  5. Calculate E[Dᵢ] by doing ∑ P ((j, Tj) is an ancestor of (k, Tk))
+  6. Then use ∑ P(Tj is the smallest of Tj, Tj+1, · · · , Tk)
+  7. Split the sum into two parts, j < i and j > i + use ln bound on harmonic numbers to get E[Dᵢ] = O(log n)
 
 
 
 
 
 
+-/
 
+/-
+  Step 0: Setup and add helper definitions + finiteness
 
+-/
 
+-- n is the number of nodes in our treap
+variable {n : ℕ}
+-- variable (n : ℕ)
 
+-- sigma is a function that maps the rank to a priority
+variable (σ : Fin n → Prio)
 
+-- The set is finite, enforce it to allow counting
+def TreapNode.keys_finset : TreapNode Key Prio → Finset Key
+  | Tree.nil => ∅
+  | Tree.node kp l r => (keys_finset l) ∪ {kp.key} ∪ (keys_finset r)
 
+-- The cardinality of keys_finset is the size of the treap
+-- It will be implicitly passed to functions that need it
 
+-- all_keys is already a set, prove they are equal
+lemma keys_finset_eq_all_keys (t : TreapNode Key Prio) :
+  (t.keys_finset : Set Key) = t.all_keys := by
+  induction t with
+  | nil => simp [TreapNode.keys_finset, TreapNode.all_keys]
+  | node kp l r ihl ihr =>
+    simp [TreapNode.keys_finset, TreapNode.all_keys, ihl, ihr]
+    rw [← Set.insert_union]
 
+/-
+  Step 1: Define rank based on keys_finset
+
+-/
+
+-- Prove rank is less than size, if the element is present
+-- Note that now everything is based on the key set!
+lemma rank_less_size (t : TreapNode Key Prio) (k : Key) (h : k ∈ t.keys_finset) :
+  (t.keys_finset.filter (fun key => key < k)).card < t.keys_finset.card := by
+  -- (t.keys_finset.filter (fun key => key < k)).card < n := by
+  apply Finset.card_lt_card
+  grind
+
+-- Define rank of a key in the treap (number of keys < k)
+-- We don't need it to be efficient, since we only use it for proofs
+def TreapNode.rank (t : TreapNode Key Prio) (k : Key)
+  (h : k ∈ t.keys_finset) (n_size : t.keys_finset.card = n) : Fin n :=
+  let num := (t.keys_finset.filter (fun key => key < k)).card
+  let proof_card := rank_less_size t k h
+
+  have proof_n : num < n := by
+    rw [← n_size]
+    exact proof_card
+
+  { val := num,
+    isLt := proof_n }
+
+/-
+  Step 2: Define ancestorship based on priorities
+
+-/
+
+-- We don't even need a valid treap!
+def is_ancestor (anc k : Fin n) :
+  Bool :=
+  let ranks := Finset.Icc anc k
+  ∀ p ∈ ranks, σ p ≤ σ anc
+
+/-
+  Step 3: Define depth based on ancestorship
+
+-/
+
+def depth (k : Fin n) : ℕ :=
+  -- ∑ j : Fin n, -- same def
+  ∑ j ∈ Finset.univ,
+    if is_ancestor σ j k then 1 else 0
+
+/-
+  Step 4: Assign priorities as a function of ranks by mapping σ to a random permutation
+
+-/
 
 
 
