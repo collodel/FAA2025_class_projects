@@ -6,6 +6,7 @@ import Mathlib.NumberTheory.Harmonic.Bounds
 import Mathlib.Data.Real.Basic
 
 open MeasureTheory ProbabilityTheory ENNReal BigOperators
+set_option maxHeartbeats 0
 
 -- 1. Define the Sample Space (Ω)
 variable {n : ℕ}
@@ -118,8 +119,54 @@ theorem prob_is_ancestor_j_le_k (j k : Fin n) (j_le_k : j ≤ k) :
     have part_union : Finset.biUnion S A = (Finset.univ : Finset Ω) := by
       simp [A]
 
+      by_cases hc : n = 0
+      · subst hc
+        simp [Equiv.Perm]
+        grind
+      -- n > 0 from here
+
+      ext
+
+      simp only [Finset.mem_biUnion, Finset.mem_filter, Finset.mem_univ, true_and, iff_true]
+      rename_i perm
+
       -- We need to choose the maximum perm element to be a
-      sorry
+      have s_map_nonempty : Finset.Nonempty (S.image (fun x => perm x)) := by
+        simp [S]
+        exact j_le_k
+
+      -- Get the maximum element
+      let m := Finset.max' (S.image (fun x => perm x)) s_map_nonempty
+      have hm : m ∈ S.image (fun x : Fin n => perm x) := by
+        subst m
+        exact Finset.max'_mem (Finset.image (fun x ↦ perm x) S) s_map_nonempty
+
+      -- Extract the corresponding index
+      have exists_t := Finset.mem_image.mp hm
+      obtain ⟨t, t_in_s, perm_t_eq_m⟩ := exists_t
+
+      -- Use this index
+      use t
+
+      constructor
+      · -- Prove t ∈ S
+        exact t_in_s
+      · -- Prove perm t is maximum
+        intro i hi i_neq_t
+        simp_all [m, S]
+        -- have : perm i ∈ (Finset.image (fun x ↦ perm x) S) := by sorry
+        refine
+          Finset.lt_max'_of_mem_erase_max' (Finset.image (fun x ↦ perm x) S)
+            s_map_nonempty ?_
+
+        -- Prove that perm i is in the set without the maximum
+        simp_all
+
+        rw [← perm_t_eq_m]
+        constructor
+        · simpa using i_neq_t
+        · -- Prove i ∈ S
+          simpa [S] using hi -- Trying this new tactic lol
 
     -- Intersection between any two instances of A is empty
     have part_inter : Set.PairwiseDisjoint S A := by
@@ -135,11 +182,42 @@ theorem prob_is_ancestor_j_le_k (j k : Fin n) (j_le_k : j ≤ k) :
     rw [← partition_card]
     rw [Finset.card_biUnion part_inter]
 
-    -- Prove the size of each A t is the same (and in this case A j)
+    -- Prove that for every i, j in S, (A i).card = (A j).card
+    have A_sum_i_j_eq : ∀ i ∈ S, ∀ j ∈ S, (A j).card = (A i).card := by
+      intro i hi j hj
+
+      -- Define a equivalence that maps a permutation to the same with i, j swapped
+      let e : Ω ≃ Ω :=
+      { toFun     := fun x => (Equiv.swap i j).trans x
+        invFun    := fun x => (Equiv.swap i j).trans x
+        left_inv  := by intro x; ext t; simp
+        right_inv := by intro x; ext t; simp }
+
+      -- Show that applying the equivalence to (A i) creates (A j)
+      have himage : A j = Finset.image e (A i) := by
+        simp [e]
+        ext x
+        constructor
+        · intro hx
+          simp_all
+          use (Equiv.swap i j).trans x -- Undo the transformation
+          grind
+        · intro hx
+          simp_all
+          obtain ⟨perm, ⟨perm_in_ai, e_perm_eq_x⟩⟩ := hx
+          grind
+
+      -- Show that carinality of (A i) is the same as its image with e by injectivity
+      have : (A i).card = (Finset.image e (A i)).card := by
+          symm
+          exact Finset.card_image_of_injective (A i) e.injective
+
+      rw [this]
+      rw [himage]
+
+    -- Use this to prove the size of each A t is the same (and in this case A j)
     have A_size_eq : ∀ u ∈ S, (A u).card = (A j).card := by
-      intro u hu
-      simp_all [A, S]
-      sorry
+      exact A_sum_i_j_eq j (by simpa [S])
 
     -- Prove that sum over u is the same as applying it to j
     have A_sum_const : ∑ u ∈ S, (A u).card = ∑ u ∈ S, (A j).card := by
@@ -239,8 +317,24 @@ theorem expected_depth (k : Fin n) :
     -- TODO: there's a bit of mess with casts here
     -- also we forced iccs from 1 to use harmonic bounds
     -- TODO: differs by the pdf proof because it's 0-indexed (to use Fin n)
-    have ik_sum : ∑ i ∈ L, f i = ∑ i ∈ Finset.Icc 1 (k + 1 : ℕ), (i : ℚ)⁻¹ - 1 := by sorry
-    have ki_sum : ∑ i ∈ R, f i = ∑ i ∈ Finset.Icc 1 (n - k : ℕ), (i : ℚ)⁻¹ - 1 := by sorry
+    have ik_sum : ∑ i ∈ L, f i = ∑ i ∈ Finset.Icc 1 (k + 1 : ℕ), (i : ℚ)⁻¹ - 1 := by
+      simp_all [f, L]
+
+      -- #check Finset.map
+      -- #check Finset.sum_bij
+      -- #check Finset.sum_comp
+
+      -- rw [← Finset.filter_gt_eq_Iio]
+      -- -- rw [max_eq_right ?_]
+      -- -- have : (fun (x : Fin n) => ((max x k + 1 - min x k) : ℝ)⁻¹) =
+      -- --         (fun (x : Fin n) => (k + 1 - x : ℝ)⁻¹) := by simp
+      -- -- sorry
+      -- simp
+
+      sorry
+
+    have ki_sum : ∑ i ∈ R, f i = ∑ i ∈ Finset.Icc 1 (n - k : ℕ), (i : ℚ)⁻¹ - 1 := by
+      sorry
 
     -- Rewrite it in the goal
     rw [k_sum, ik_sum, ki_sum]
