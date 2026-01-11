@@ -57,7 +57,7 @@ noncomputable instance (n : ℕ) : IsFiniteMeasure (P (n := n)) := by
 noncomputable def isAncestor (j k : Fin n) : Ω → ℝ :=
   fun perm =>
     if ∀ i ∈ Finset.Icc (min j k) (max j k), i ≠ j → perm j > perm i then 1 else 0
-  #check isAncestor
+-- #check isAncestor
 
 -- 6. Calculate the expected value of being an ancestor
 theorem prob_is_ancestor_j_le_k (j k : Fin n) (j_le_k : j ≤ k) :
@@ -232,17 +232,190 @@ theorem prob_is_ancestor_j_le_k (j k : Fin n) (j_le_k : j ≤ k) :
     -- Apply commutative property
     rw [Nat.mul_comm]
 
+-- 6.1. Calculate the expected value of being an ancestor
+theorem prob_is_ancestor_j_gt_k (j k : Fin n) (j_gt_k : j ≥ k) :
+    ∫ ω, isAncestor j k ω ∂P = 1 / (Finset.Icc (min j k) (max j k)).card := by
+    classical
+
+    -- 1. Rewrite into a sum
+    simp only [P, PMF.integral_eq_sum, smul_eq_mul]
+
+    -- 2. Simplify the sum
+    simp only [permPMF, PMF.ofFintype_apply, perm_prob, one_div, toReal_inv, toReal_natCast]
+
+    -- 3. Take out the constant factor (and move it to the RHS)
+    simp only [← Finset.mul_sum]
+    field_simp
+
+    -- 4. Unfold isAncestor and convert to a cardinality problem
+    simp only [isAncestor]
+    -- Do not simplify too much!
+    -- (no) simp only [Finset.mem_Icc]
+
+    rw [Finset.sum_boole]
+
+    rw [← Finset.natCast_card_mul_nnratCast_dens]
+    field_simp
+
+    -- 5. Simplify the expressions, try to obtain A.card * B.card = Fintype.card Ω
+    simp only [Finset.dens, gt_iff_lt, NNRat.cast_div,
+      NNRat.cast_natCast, one_div]
+
+    have denom_neq_0 : ↑(Finset.Icc (min j k) (max j k)).card ≠ 0 := by
+      simp only [Fin.card_Icc, Fin.coe_max, Fin.coe_min]
+      omega
+
+    field_simp
+
+    -- 6. Convert to Nat cardinals
+    norm_cast -- Cast everything to Nat https://proofassistants.stackexchange.com/questions/4113/how-to-perform-type-conversion-coercion-in-lean-4
+
+    -- 7. Prove by cases, j < k and j > k
+    rw [min_eq_right (by omega), max_eq_left (by omega)]
+    -- Call the interval S
+    set S : Finset (Fin n) := Finset.Icc k j
+
+    -- 8. Define A t where t is the index of the maximum in S.
+    -- A is the set of permutations where this is true
+    let A (t : Fin n) : Finset Ω :=
+      {x : Ω | ∀ i ∈ S, ¬i = t → x i < x t}
+      -- Finset.filter (fun x => ∀ i ∈ S, ¬i = t → x i < x t) (Ω.finsetEquivSet)
+
+    -- We'll show that the sets A t for t ∈ S partition Ω
+    -- then that each A t has the same cardinality, since we have trivially |S| such sets,
+    -- we'll be able to calculate the cardinality of A t as |Ω| / |S|
+
+    -- Union over t ∈ S of A t is Ω
+    -- biUnion takes each element of S and maps A to it
+    -- Also here, it's equal to the universe of the set given by Ω
+    -- (Finset.univ is magical and autoguesses stuff)
+    have part_union : Finset.biUnion S A = (Finset.univ : Finset Ω) := by
+      simp [A]
+
+      by_cases hc : n = 0
+      · subst hc
+        simp [Equiv.Perm]
+        grind
+      -- n > 0 from here
+
+      ext
+
+      simp only [Finset.mem_biUnion, Finset.mem_filter, Finset.mem_univ, true_and, iff_true]
+      rename_i perm
+
+      -- We need to choose the maximum perm element to be a
+      have s_map_nonempty : Finset.Nonempty (S.image (fun x => perm x)) := by
+        simp [S]
+        assumption
+
+      -- Get the maximum element
+      let m := Finset.max' (S.image (fun x => perm x)) s_map_nonempty
+      have hm : m ∈ S.image (fun x : Fin n => perm x) := by
+        subst m
+        exact Finset.max'_mem (Finset.image (fun x ↦ perm x) S) s_map_nonempty
+
+      -- Extract the corresponding index
+      have exists_t := Finset.mem_image.mp hm
+      obtain ⟨t, t_in_s, perm_t_eq_m⟩ := exists_t
+
+      -- Use this index
+      use t
+
+      constructor
+      · -- Prove t ∈ S
+        exact t_in_s
+      · -- Prove perm t is maximum
+        intro i hi i_neq_t
+        simp_all [m, S]
+        -- have : perm i ∈ (Finset.image (fun x ↦ perm x) S) := by sorry
+        refine
+          Finset.lt_max'_of_mem_erase_max' (Finset.image (fun x ↦ perm x) S)
+            s_map_nonempty ?_
+
+        -- Prove that perm i is in the set without the maximum
+        simp_all
+
+        rw [← perm_t_eq_m]
+        constructor
+        · simpa using i_neq_t
+        · -- Prove i ∈ S
+          simpa [S] using hi -- Trying this new tactic lol
+
+    -- Intersection between any two instances of A is empty
+    have part_inter : Set.PairwiseDisjoint S A := by
+      simp_all [Set.PairwiseDisjoint, Set.Pairwise, Disjoint]
+      intro x hx y yx neq perm perm_x perm_y
+      grind
+
+    -- Rewrite the univ set cardinality
+    have partition_card : (Finset.biUnion S A).card = Fintype.card Ω := by
+      rw [part_union]
+      rfl
+
+    rw [← partition_card]
+    rw [Finset.card_biUnion part_inter]
+
+    -- Prove that for every i, j in S, (A i).card = (A j).card
+    have A_sum_i_j_eq : ∀ i ∈ S, ∀ j ∈ S, (A j).card = (A i).card := by
+      intro i hi j hj
+
+      -- Define a equivalence that maps a permutation to the same with i, j swapped
+      let e : Ω ≃ Ω :=
+      { toFun     := fun x => (Equiv.swap i j).trans x
+        invFun    := fun x => (Equiv.swap i j).trans x
+        left_inv  := by intro x; ext t; simp
+        right_inv := by intro x; ext t; simp }
+
+      -- Show that applying the equivalence to (A i) creates (A j)
+      have himage : A j = Finset.image e (A i) := by
+        simp [e]
+        ext x
+        constructor
+        · intro hx
+          simp_all
+          use (Equiv.swap i j).trans x -- Undo the transformation
+          grind
+        · intro hx
+          simp_all
+          obtain ⟨perm, ⟨perm_in_ai, e_perm_eq_x⟩⟩ := hx
+          grind
+
+      -- Show that carinality of (A i) is the same as its image with e by injectivity
+      have : (A i).card = (Finset.image e (A i)).card := by
+          symm
+          exact Finset.card_image_of_injective (A i) e.injective
+
+      rw [this]
+      rw [himage]
+
+    -- Use this to prove the size of each A t is the same (and in this case A j)
+    have A_size_eq : ∀ u ∈ S, (A u).card = (A j).card := by
+      exact A_sum_i_j_eq j (by simpa [S])
+
+    -- Prove that sum over u is the same as applying it to j
+    have A_sum_const : ∑ u ∈ S, (A u).card = ∑ u ∈ S, (A j).card := by
+      apply Finset.sum_congr (by rfl)
+      exact A_size_eq
+
+    rw [A_sum_const]
+
+    -- Rewrite the sum of a constant value
+    rw [Finset.sum_const, smul_eq_mul]
+
+    -- Apply commutative property
+    rw [Nat.mul_comm]
+
 theorem prob_is_ancestor (j k : Fin n) :
     ∫ ω, isAncestor j k ω ∂P = 1 / (Finset.Icc (min j k) (max j k)).card := by
     by_cases hjk : j < k
     · exact prob_is_ancestor_j_le_k j k (by omega)
-    · sorry
+    · exact prob_is_ancestor_j_gt_k j k (by omega)
 
 -- 5. Define a new class of random variables depth, which is the sum of all ancestors
 noncomputable def depth (k : Fin n) : Ω → ℝ :=
   ∑ j : Fin n, isAncestor j k
 
-#check depth
+-- #check depth
 
 theorem expected_depth (k : Fin n) :
     ∫ ω, depth k ω ∂P ≤ 1 + 2 * Real.log n := by
@@ -317,31 +490,152 @@ theorem expected_depth (k : Fin n) :
     -- TODO: there's a bit of mess with casts here
     -- also we forced iccs from 1 to use harmonic bounds
     -- TODO: differs by the pdf proof because it's 0-indexed (to use Fin n)
-    have ik_sum : ∑ i ∈ L, f i = ∑ i ∈ Finset.Icc 1 (k + 1 : ℕ), (i : ℚ)⁻¹ - 1 := by
-      simp_all [f, L]
+    have ik_sum : ∑ i ∈ L, f i = ∑ i ∈ Finset.Icc 2 (k + 1 : ℕ), (i : ℚ)⁻¹ := by
 
-      -- #check Finset.map
-      -- #check Finset.sum_bij
-      -- #check Finset.sum_comp
+      -- Simplify max, min
+      have simp_min_max : ∑ i ∈ L, f i = ∑ x ∈ Finset.Iio k, (k + 1 - x : ℚ)⁻¹ := by
+        simp_all [f, L]
+        have subgoal : ∀ i ∈ Finset.Iio k, (@Nat.cast ℝ Real.instNatCast (max ↑i ↑k + 1 - min ↑i ↑k))⁻¹ = (↑↑k + 1 - ↑↑i : ℝ)⁻¹ := by
+          intro x hx
+          simp_all only [Finset.mem_Iio, inv_inj]
+          repeat rw [← Fin.coe_max x k] -- push cast out of the max and min
+          rw [max_eq_right (by omega), min_eq_left (by omega)]
+          rw [Nat.cast_sub (by omega), Nat.cast_add_one ↑k]
+        rw [Finset.sum_eq_sum_iff_of_le ?_]
 
-      -- rw [← Finset.filter_gt_eq_Iio]
-      -- -- rw [max_eq_right ?_]
-      -- -- have : (fun (x : Fin n) => ((max x k + 1 - min x k) : ℝ)⁻¹) =
-      -- --         (fun (x : Fin n) => (k + 1 - x : ℝ)⁻¹) := by simp
-      -- -- sorry
-      -- simp
+        · exact subgoal
+        · simp_all only [Finset.mem_Iio, inv_inj, le_refl, implies_true]
 
-      sorry
+      rw [simp_min_max]
+      simp_all [f, L] -- this performs a cast ℚ → ℝ
 
-    have ki_sum : ∑ i ∈ R, f i = ∑ i ∈ Finset.Icc 1 (n - k : ℕ), (i : ℚ)⁻¹ - 1 := by
-      sorry
+      -- Prepare to reorder the sum
+
+      -- Function that maps the indices
+      let map_fun : (a : Fin n) → a ∈ Finset.Iio k → ℕ :=
+        fun x hx => k + 1 - x
+
+      -- Reorder the sum
+      refine Finset.sum_bij (ι := Fin n) (κ := ℕ) (M := ℝ) -- set types
+        (s := Finset.Iio k) (t := Finset.Icc 2 (k + 1 : ℕ)) -- set finsets
+        (f := fun x => (k + 1 - x : ℝ)⁻¹) (g := fun x => (x : ℝ)⁻¹) -- set sum functions (to M)
+        map_fun
+        ?_
+        ?_
+        ?_
+        ?_
+
+      · simp_all
+        grind
+      · -- injectivity
+        simp_all
+        grind
+      · -- surjectivity
+        simp only [Finset.mem_Icc, Finset.mem_Iio, and_imp]
+        intro x lb ub
+        simp [map_fun]
+        use { val := k + 1 - x, isLt := by omega }
+        constructor
+        · have : ↑k + 1 - x < k := by
+            omega
+          exact this
+        · simp_all
+          rw [Nat.sub_sub_self ub]
+      · simp_all
+        intro x hx
+        unfold map_fun
+        norm_cast; rw [Int.subNatNat_of_le ?_]
+        omega
+
+    have ik_sum_one :
+      ∑ i ∈ Finset.Icc 2 (k + 1 : ℕ), (i : ℚ)⁻¹ =
+      ∑ i ∈ Finset.Icc 1 (k + 1 : ℕ), (i : ℚ)⁻¹ - 1
+      := by
+        have subset : {1} ∪ Finset.Icc 2 (k + 1 : ℕ) = Finset.Icc 1 (k + 1 : ℕ) := by
+          ext x
+          simp only [Finset.singleton_union, Finset.mem_insert, Finset.mem_Icc]
+          omega
+        rw [← subset]
+        rw [Finset.sum_union (by simp_all)]
+        simp only [Finset.sum_singleton, Nat.cast_one, inv_one, add_sub_cancel_left]
+
+    have ki_sum : ∑ i ∈ R, f i = ∑ i ∈ Finset.Icc 2 (n - k : ℕ), (i : ℚ)⁻¹ := by
+      -- Simplify max, min
+      have simp_min_max : ∑ i ∈ R, f i = ∑ x ∈ Finset.Ioi k, (x + 1 - k : ℚ)⁻¹ := by
+        simp_all [f, R]
+        have subgoal : ∀ i ∈ Finset.Ioi k, (@Nat.cast ℝ Real.instNatCast (max ↑i ↑k + 1 - min ↑i ↑k))⁻¹ = (↑↑i + 1 - ↑↑k : ℝ)⁻¹ := by
+          intro x hx
+          simp_all only [Finset.mem_Ioi, inv_inj]
+          repeat rw [← Fin.coe_max x k] -- push cast out of the max and min
+          rw [max_eq_left (by omega), min_eq_right (by omega)]
+          rw [Nat.cast_sub (by omega), Nat.cast_add_one ↑x]
+        rw [Finset.sum_eq_sum_iff_of_le ?_]
+
+        · exact subgoal
+        · simp_all only [Finset.mem_Ioi, inv_inj, le_refl, implies_true]
+
+      rw [simp_min_max]
+      simp_all [f, R] -- this performs a cast ℚ → ℝ
+
+      -- Prepare to reorder the sum
+
+      -- Function that maps the indices
+      let map_fun : (a : Fin n) → a ∈ Finset.Ioi k → ℕ :=
+        fun x hx => x + 1 - k
+
+      -- Reorder the sum
+      refine Finset.sum_bij (ι := Fin n) (κ := ℕ) (M := ℝ) -- set types
+        (s := Finset.Ioi k) (t := Finset.Icc 2 (n - k : ℕ)) -- set finsets
+        (f := fun x => (x + 1 - k : ℝ)⁻¹) (g := fun x => (x : ℝ)⁻¹) -- set sum functions (to M)
+        map_fun
+        ?_
+        ?_
+        ?_
+        ?_
+
+      · simp_all
+        grind
+      · -- injectivity
+        simp_all
+        grind
+      · -- surjectivity
+        simp only [Finset.mem_Icc, Finset.mem_Ioi, and_imp]
+        intro x lb ub
+        simp [map_fun]
+        use { val := x + k - 1, isLt := by omega }
+        constructor
+        · have : k < x + ↑k - 1 := by
+            omega
+          exact this
+        · simp_all
+          rw [Nat.sub_add_comm (by omega)]
+          grind
+      · simp_all
+        intro x hx
+        unfold map_fun
+        norm_cast; rw [Int.subNatNat_of_le ?_]
+        omega
+
+
+    have ki_sum_one :
+      ∑ i ∈ Finset.Icc 2 (n - k : ℕ), (i : ℚ)⁻¹ =
+      ∑ i ∈ Finset.Icc 1 (n - k : ℕ), (i : ℚ)⁻¹ - 1 := by
+        have subset : {1} ∪ Finset.Icc 2 (n - k : ℕ) = Finset.Icc 1 (n - k : ℕ) := by
+          ext x
+          simp only [Finset.singleton_union, Finset.mem_insert, Finset.mem_Icc]
+          omega
+        rw [← subset]
+        rw [Finset.sum_union (by simp_all)]
+        simp only [Finset.sum_singleton, Nat.cast_one, inv_one, add_sub_cancel_left]
+
 
     -- Rewrite it in the goal
-    rw [k_sum, ik_sum, ki_sum]
+    rw [k_sum, ik_sum, ki_sum, ik_sum_one, ki_sum_one]
     rw [← harmonic_eq_sum_Icc (n := k + 1)]
     rw [← harmonic_eq_sum_Icc (n := n - k)]
 
     -- Use bounds on logs (<3 Arend Mellendijk)
+    repeat rw [Rat.cast_sub]
     grw [harmonic_le_one_add_log (n := k + 1)]
     grw [harmonic_le_one_add_log (n := n - k)]
 
@@ -360,15 +654,13 @@ theorem expected_depth (k : Fin n) :
       · rw [Int.subNatNat_of_le (by simp)]
         simp
 
-    simp only [add_sub_cancel_left, Nat.cast_add, Fin.is_le', Nat.cast_sub, Nat.cast_one, ge_iff_le]
+    simp only [Nat.cast_add, Fin.is_le', Nat.cast_sub, Nat.cast_one, ge_iff_le]
     grw [log_k_lt_logn]
     grw [log_n_k_1_lt_logn]
 
     -- Rearrange terms
-    calc
-      Real.log ↑n + 1 + Real.log ↑n = 1 + Real.log ↑n + Real.log ↑n := by rw [add_comm _ 1]
-      _ = 1 + (Real.log ↑n + Real.log ↑n) := by rw [add_assoc]
-      _ ≤ 1 + 2 * Real.log ↑n := by rw [← two_mul]
+    ring_nf
+    exact Std.IsPreorder.le_refl (1 + Real.log ↑n * 2)
 
     · intro i hi
       unfold isAncestor
