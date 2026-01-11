@@ -6,7 +6,7 @@ import Mathlib.NumberTheory.Harmonic.Bounds
 import Mathlib.Data.Real.Basic
 
 open MeasureTheory ProbabilityTheory ENNReal BigOperators
-set_option maxHeartbeats 0
+set_option maxHeartbeats 0 -- TODO automation takes longer
 
 -- 1. Define the Sample Space (Ω)
 variable {n : ℕ}
@@ -435,14 +435,16 @@ theorem expected_depth (k : Fin n) :
     rw [MeasureTheory.integral_finset_sum]
 
     -- Map the functions to substitute the integral
-    have h_eval :
-      (fun i => ∫ (a : Ω), isAncestor i k a ∂P)
-        = (fun i => (1 / (Finset.Icc (min i k) (max i k)).card : ℝ)) := by
-      simp only [prob_is_ancestor]
+    -- have h_eval :
+    --   (fun i => ∫ (a : Ω), isAncestor i k a ∂P)
+    --     = (fun i => (1 / (Finset.Icc (min i k) (max i k)).card : ℝ)) := by
+    --   simp only [prob_is_ancestor]
 
-    -- Plug the sum
-    rw [h_eval]
-    clear h_eval
+
+    -- -- Plug the sum
+    -- rw [h_eval]
+    -- clear h_eval
+    simp_rw [prob_is_ancestor] -- this works too TODO: fix other longer proofs (also try conv)
 
     -- Prove n = 0 case here to allow simplifying the logarithms later
     by_cases hc : n = 0

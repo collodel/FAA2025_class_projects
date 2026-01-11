@@ -15,6 +15,9 @@ Formalization of Analysis of Algorithms - ETH Zurich
     - [x] Merge
     - [ ] Insert, delete, Build (optional)
 - [ ] RandomizedTreap, prove that expected height is O(log N)
+    - [x] Implement the probability part on a different file, with cartesian tree depth proof
+    - [ ] Prove also the height?
+    - [ ] Bridge treap and probabilistic proof
 
 ## Quick Start
 
