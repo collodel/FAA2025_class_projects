@@ -1258,22 +1258,41 @@ theorem smallest_is_leftmost (tn : TreapNode Key Prio) (tn_bst : IsBST tn) (k : 
 
 -- split and splitUpper are exactly the same if the key element is not in the treap
 lemma split_eq_splitUpper_if_no_k (tn : TreapNode Key Prio) (k : Key) :
-  k ∉ tn.all_keys → (tn.split k) = (tn.splitUpper k) := by
-  sorry
+  k ∉ tn.all_keys → (tn.split k).2.all_keys = (tn.splitUpper k).2.all_keys := by
+  intro hk
+  match tn with
+  | Tree.nil =>
+    simp [TreapNode.split, TreapNode.splitUpper]
+  | Tree.node kp l r =>
+    simp [TreapNode.split, TreapNode.splitUpper]
+    -- Go through each case
+    split_ifs <;> expose_names
+    · simp
+      refine split_eq_splitUpper_if_no_k r k ?_
+      rw [TreapNode.all_keys] at hk
+      simp_all only [Set.union_singleton, Set.mem_union, Set.mem_insert_iff, not_or,
+        not_false_eq_true]
 
--- lemma all_keys_eq_split_splitUpper_l (tn : TreapNode Key Prio) (k : Key) :
---   k ∈ tn.all_keys → TreapNode.all_keys (tn.split k).1 = TreapNode.all_keys (tn.splitUpper k).1 \ {k} := by
---   sorry
+    · -- Contradictory case
+      rw [not_le] at h_1
+      grind
 
--- lemma all_keys_eq_split_splitUpper_r (tn : TreapNode Key Prio) (k : Key) :
---   k ∈ tn.all_keys → TreapNode.all_keys (tn.split k).2 \ {k} = TreapNode.all_keys (tn.splitUpper k).2 := by
---   sorry
+    · -- kp.key = k
+      rw [not_lt] at h
+      have : k = kp.key := by exact Std.le_antisymm h h_1
+      subst this
+      simp_all [TreapNode.all_keys]
 
--- lemma all_keys_eq_split_splitUpper_l' (tn : TreapNode Key Prio) (k : Key) :
---   k ∈ tn.all_keys → TreapNode.all_keys (tn.split k).1 ∪ {k} = TreapNode.all_keys (tn.splitUpper k).1 := by
---   sorry
+    · simp_rw [TreapNode.all_keys]
+      suffices
+        (TreapNode.split l k).2.all_keys =
+        (TreapNode.splitUpper l k).2.all_keys by simp_all only [not_lt, not_le, Set.union_singleton]
+      refine split_eq_splitUpper_if_no_k l k ?_
+      rw [TreapNode.all_keys] at hk
+      simp_all only [Set.union_singleton, Set.mem_union, Set.mem_insert_iff, not_or,
+        not_false_eq_true]
 
-lemma all_keys_eq_split_splitUpper_r' (tn : TreapNode Key Prio) (k : Key) (bst : IsBST tn) :
+lemma all_keys_eq_split_splitUpper_r (tn : TreapNode Key Prio) (k : Key) (bst : IsBST tn) :
   k ∈ tn.all_keys → TreapNode.all_keys (tn.split k).2 = TreapNode.all_keys (tn.splitUpper k).2 ∪ {k} := by
   intro hk
   match tn with
@@ -1283,7 +1302,7 @@ lemma all_keys_eq_split_splitUpper_r' (tn : TreapNode Key Prio) (k : Key) (bst :
     split_ifs <;> expose_names
     · simp only
       cases bst; rename_i bst_l left_l_key bst_r right_ge_key
-      refine all_keys_eq_split_splitUpper_r' r k bst_r ?_
+      refine all_keys_eq_split_splitUpper_r r k bst_r ?_
       -- Show it can only be in the right subtree with bst inequalities
 
       -- Left, center, right
@@ -1303,9 +1322,8 @@ lemma all_keys_eq_split_splitUpper_r' (tn : TreapNode Key Prio) (k : Key) (bst :
 
       cases bst; rename_i bst_l left_l_key bst_r right_ge_key
       simp_all only [TreapNode.all_keys]
-      suffices
-        (TreapNode.split l kp.key).2.all_keys ∪ TreapNode.all_keys r =
-        (TreapNode.splitUpper r kp.key).2.all_keys by grind
+      suffices (TreapNode.split l kp.key).2.all_keys ∪ (TreapNode.all_keys r) ∪ {kp.key} =
+        (TreapNode.splitUpper r kp.key).2.all_keys ∪ {kp.key} by grind
 
       -- Build all inequalities on left and right side
       have l_ge_k := split_right_ge_k l bst_l kp.key
@@ -1324,17 +1342,15 @@ lemma all_keys_eq_split_splitUpper_r' (tn : TreapNode Key Prio) (k : Key) (bst :
         (TreapNode.splitUpper r kp.key).1.all_keys = {kp.key} := by grind
 
       -- Close the goal
-      simp_all
       rw [← all_keys_union_splitUpper r kp.key]
       cases split_r_l
       · simp_all
       · simp_all
-        sorry
 
     · simp only [TreapNode.all_keys]
       suffices (TreapNode.split l k).2.all_keys = (TreapNode.splitUpper l k).2.all_keys ∪ {k} by grind
       cases bst; rename_i bst_l left_l_key bst_r right_ge_key
-      refine all_keys_eq_split_splitUpper_r' l k bst_l ?_
+      refine all_keys_eq_split_splitUpper_r l k bst_l ?_
       -- Show it can only be in the left subtree with bst inequalities
 
       -- Left, center, right
@@ -1342,14 +1358,6 @@ lemma all_keys_eq_split_splitUpper_r' (tn : TreapNode Key Prio) (k : Key) (bst :
       · simp_all
       · simp_all
       · grind
-
--- lemma all_keys_k_in_splitUpper_l (tn : TreapNode Key Prio) (k : Key) :
---   k ∈ tn.all_keys → k ∈ TreapNode.all_keys (tn.splitUpper k).1 := by
---   sorry
-
--- lemma all_keys_k_in_split_r (tn : TreapNode Key Prio) (k : Key) :
---   k ∈ tn.all_keys → k ∈ TreapNode.all_keys (tn.split k).2 := by
---   sorry
 
 -- Stricter condition, implies the other keys don't change
 theorem insert_inserts_element (t : Treap Key Prio) (ins_kp : KeyPrioPair Key Prio) :
@@ -1379,36 +1387,37 @@ theorem insert_inserts_element (t : Treap Key Prio) (ins_kp : KeyPrioPair Key Pr
       ((t.root.splitUpper ins_kp.key).2.all_keys ∪ {ins_kp.key}) = t.root.all_keys by grind
     simp at hc
     -- Remove ins_kp from both sets
-    rw [← all_keys_eq_split_splitUpper_r' t.root ins_kp.key t.is_treap.2 ?_]
+    rw [← all_keys_eq_split_splitUpper_r t.root ins_kp.key t.is_treap.2 ?_]
     rw [all_keys_union_split t.root ins_kp.key]
 
     grind
 
-    -- suffices ((t.root.split ins_kp.key).1.all_keys ∪ (t.root.splitUpper ins_kp.key).2.all_keys) \ {ins_kp.key} =
-    --   t.root.all_keys \ {ins_kp.key} by
-    --   have left : ins_kp.key ∈ (t.root.split ins_kp.key).1.all_keys ∪ (t.root.splitUpper ins_kp.key).2.all_keys := by
-    --     have := all_keys_k_in_splitUpper_l t.root ins_kp.key ?_
-
-    --   have right : ins_kp.key ∈ t.root.all_keys := by exact hc
-    --   grind
-
-    -- rw [← all_keys_eq_split_splitUpper_r t.root ins_kp.key (by simp_all only)]
-    -- -- Simplify the expression
-    -- suffices
-    --   ((t.root.split ins_kp.key).1.all_keys ∪ (t.root.split ins_kp.key).2.all_keys) \ {ins_kp.key} =
-    --   t.root.all_keys \ {ins_kp.key} by grind
-
-    -- rw [all_keys_union_split t.root ins_kp.key]
-
-  -- -- Ignore the insert ins_kp.key
-  --
-
-
 
 theorem delete_deletes_element (t : Treap Key Prio) (del_kp : KeyPrioPair Key Prio) :
   (Treap.delete t del_kp).root.all_keys = t.root.all_keys \ {del_kp.key} := by
+    -- Split inequalities
+  have l_lt_k := split_left_lt_k t.root t.is_treap.2 del_kp.key
+  have r_ge_k := split_right_ge_k t.root t.is_treap.2 del_kp.key
 
-  sorry
+  -- SplitUpper inequalities
+  have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 del_kp.key
+  have r_gt_k := splitUpper_right_gt_k t.root t.is_treap.2 del_kp.key
+
+  -- Unfold all Treap definitions, get only the TreapNode ones
+  simp_all [Treap.delete, Treap.split, Treap.merge, Treap.splitUpper]
+
+  rw [← all_keys_union_merge]
+
+  -- Again, prove by cases
+  by_cases hc : del_kp.key ∉ t.root.all_keys
+  · rw [← split_eq_splitUpper_if_no_k t.root del_kp.key hc]
+    rw [Set.diff_singleton_eq_self hc]
+    exact all_keys_union_split t.root del_kp.key
+  · rw [not_not] at hc
+    rw [← all_keys_union_split t.root del_kp.key]
+    rw [all_keys_eq_split_splitUpper_r t.root del_kp.key t.is_treap.2 hc]
+    grind
+
 
 -- Find returns the key iff the key is present in the treap
 theorem find_finds_element (t : Treap Key Prio) (k : Key) :
