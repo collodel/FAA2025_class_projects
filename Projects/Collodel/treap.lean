@@ -3,8 +3,7 @@
 
 -/
 
-import Projects.Treap.time
-import Projects.Treap.perm
+import Projects.Collodel.time
 
 import Mathlib
 import Mathlib.Tactic
@@ -19,7 +18,7 @@ open Tree
 /-
   Base Treap definitions and properties
 
-  We use explicit type variables for functions. structures and abbrevs are defined implicitely
+  We use implicit type variables for functions. structures and abbrevs are defined explicitely.
   LinearOrder is required for both Key and Prio types to enable comparisons
 -/
 variable {Key : Type} [LinearOrder Key]
@@ -112,7 +111,7 @@ inductive IsBST : (TreapNode Key Prio) → Prop
 inductive IsHeap : (TreapNode Key Prio) → Prop
   | nil : IsHeap Tree.nil
   | node (tn : KeyPrioPair Key Prio) (l r : TreapNode Key Prio) :
-    -- Require priority of current node to be >= priorities of all left and right subtrees (stricter but easier to prove)
+    -- Require priority of current node to be >= priorities of all left and right subtrees (stricter but easier to prove, equivalent to the local max version)
     (∀ p, p ∈ l.all_prios → p ≤ tn.prio) →
     (∀ p, p ∈ r.all_prios → p ≤ tn.prio) →
     -- Recursively require left and right subtrees to also satisfy heap property
@@ -401,15 +400,15 @@ lemma split_left_lt_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) 
     split_ifs
     · simp
 
-      have l_less : ∀ lk, lk ∈ (TreapNode.all_keys l) → lk < k := by
-        rename_i h_less
-        grw [←h_less]
+      have l_lt : ∀ lk, lk ∈ (TreapNode.all_keys l) → lk < k := by
+        rename_i h_lt
+        grw [←h_lt]
         -- By definition l < kp.key
         exact h_1
 
-      have r_less : ∀ lk, lk ∈ (TreapNode.split r k).1.all_keys → lk < k := by
+      have r_lt : ∀ lk, lk ∈ (TreapNode.split r k).1.all_keys → lk < k := by
 
-        -- Recursively, the splitted part will be less than k
+        -- Recursively, the splitted part will be lt than k
         apply split_left_lt_k
         exact h_2
 
@@ -431,7 +430,7 @@ lemma split_right_ge_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key)
     -- Complex one
     rw [TreapNode.split]
     -- Break down the IsBST proof
-    cases tn_proof; rename_i l_proof l_less r_proof r_ge
+    cases tn_proof; rename_i l_proof l_lt r_proof r_ge
     split_ifs <;> simp_all
     · exact split_right_ge_k r r_proof k
     · unfold TreapNode.all_keys
@@ -450,11 +449,49 @@ lemma split_right_ge_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key)
         grw [le_h]
         exact r_ge
 
+-- All keys are union in a split
+theorem all_keys_union_split (node : TreapNode Key Prio) (k : Key) :
+  (node.split k).1.all_keys ∪ (node.split k).2.all_keys = node.all_keys := by
+  rw [TreapNode.all_keys.eq_def node]
+  match node with
+  | Tree.nil =>
+    simp [TreapNode.split, TreapNode.all_keys]
+  | Tree.node kp l r =>
+    unfold TreapNode.split; split_ifs <;> expose_names
+    · simp_rw [TreapNode.all_keys] -- gives a better result in this case (simp puts insert ...) tactic found the first time in https://github.com/nielsvoss/lean-pitfalls?tab=readme-ov-file#rewriting-under-binders
+      have : (TreapNode.split r k).1.all_keys ∪ (TreapNode.split r k).2.all_keys = TreapNode.all_keys r := by
+        exact all_keys_union_split r k
+      rw [← this]
+      grind
+    · simp_rw [TreapNode.all_keys]
+      have : (TreapNode.split l k).1.all_keys ∪ (TreapNode.split l k).2.all_keys = TreapNode.all_keys l := by
+        exact all_keys_union_split l k
+      rw [← this]
+      grind
+
+-- Keys are not duplicated in splits (requires IsBST)
+theorem all_keys_inter_split (node : TreapNode Key Prio) (bst : IsBST node) (k : Key) :
+  (node.split k).1.all_keys ∩ (node.split k).2.all_keys = ∅ := by
+  match node with
+  | Tree.nil =>
+    simp [TreapNode.split, TreapNode.all_keys]
+  | Tree.node kp l r =>
+    have split_l_lt_r :
+      ∀ kl ∈ (TreapNode.split (Tree.node kp l r) k).1.all_keys,
+      ∀ kr ∈ (TreapNode.split (Tree.node kp l r) k).2.all_keys, kl < kr := by
+      intro kl hkl kr hkr
+      apply Std.lt_of_lt_of_le -- convert < to (< k, k ≤)
+      · exact split_left_lt_k (Tree.node kp l r) bst k kl hkl
+      · exact split_right_ge_k (Tree.node kp l r) bst k kr hkr
+    grind
+
+
 /-
   splitUpper proofs are almost the same as the split ones
   They are mostly copy pasted and adjusted
 
 -/
+
 -- All keys found on the left after a splitUpper were originally on the root
 theorem all_keys_subset_splitUpper_l (node : TreapNode Key Prio) (l : TreapNode Key Prio) (k : Key) :
   (TreapNode.splitUpper node k).1 = l → l.all_keys ⊆ node.all_keys := by
@@ -528,43 +565,6 @@ theorem all_keys_subset_splitUpper_r (node : TreapNode Key Prio) (r : TreapNode 
       · aesop
       · aesop
 
--- TODO: copy these for splitUpper
--- All keys are union in a split
-theorem all_keys_union_split (node : TreapNode Key Prio) (k : Key) :
-  (node.split k).1.all_keys ∪ (node.split k).2.all_keys = node.all_keys := by
-  rw [TreapNode.all_keys.eq_def node]
-  match node with
-  | Tree.nil =>
-    simp [TreapNode.split, TreapNode.all_keys]
-  | Tree.node kp l r =>
-    unfold TreapNode.split; split_ifs <;> expose_names
-    · simp_rw [TreapNode.all_keys] -- gives a better result in this case (simp puts insert ...) tactic found the first time in https://github.com/nielsvoss/lean-pitfalls?tab=readme-ov-file#rewriting-under-binders
-      have : (TreapNode.split r k).1.all_keys ∪ (TreapNode.split r k).2.all_keys = TreapNode.all_keys r := by
-        exact all_keys_union_split r k
-      rw [← this]
-      grind
-    · simp_rw [TreapNode.all_keys]
-      have : (TreapNode.split l k).1.all_keys ∪ (TreapNode.split l k).2.all_keys = TreapNode.all_keys l := by
-        exact all_keys_union_split l k
-      rw [← this]
-      grind
-
--- Keys are not duplicated in splits (requires IsBST)
-theorem all_keys_inter_split (node : TreapNode Key Prio) (bst : IsBST node) (k : Key) :
-  (node.split k).1.all_keys ∩ (node.split k).2.all_keys = ∅ := by
-  match node with
-  | Tree.nil =>
-    simp [TreapNode.split, TreapNode.all_keys]
-  | Tree.node kp l r =>
-    have split_l_lt_r :
-      ∀ kl ∈ (TreapNode.split (Tree.node kp l r) k).1.all_keys,
-      ∀ kr ∈ (TreapNode.split (Tree.node kp l r) k).2.all_keys, kl < kr := by
-      intro kl hkl kr hkr
-      apply Std.lt_of_lt_of_le -- convert < to (< k, k ≤)
-      · exact split_left_lt_k (Tree.node kp l r) bst k kl hkl
-      · exact split_right_ge_k (Tree.node kp l r) bst k kr hkr
-    grind
-
 -- All priorities on the left of a splitUpper are a subset of the root priorities
 theorem all_prios_subset_splitUpper_l (node l : TreapNode Key Prio) (k : Key) :
   (TreapNode.splitUpper node k).1 = l → l.all_prios ⊆ node.all_prios := by
@@ -599,7 +599,7 @@ theorem all_prios_subset_splitUpper_r (node r : TreapNode Key Prio) (k : Key) :
       suffices (TreapNode.splitUpper l k).2.all_prios ⊆ TreapNode.all_prios l by grind
       exact all_prios_subset_splitUpper_r l (TreapNode.splitUpper l k).2 k (by simp)
 
--- All keys on the left of a splitUpper k are < k
+-- All keys on the left of a splitUpper k are ≤ k
 lemma splitUpper_left_le_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
   ∀ lk, lk ∈ (TreapNode.splitUpper tn k).1.all_keys → lk ≤ k := by
   match tn with
@@ -615,15 +615,15 @@ lemma splitUpper_left_le_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : 
     split_ifs
     · simp
 
-      have l_less : ∀ lk, lk ∈ (TreapNode.all_keys l) → lk < k := by
-        rename_i h_less
-        grw [←h_less]
+      have l_lt : ∀ lk, lk ∈ (TreapNode.all_keys l) → lk < k := by
+        rename_i h_lt
+        grw [←h_lt]
         -- By definition l < kp.key
         exact h_1
 
-      have r_less : ∀ lk, lk ∈ (TreapNode.splitUpper r k).1.all_keys → lk ≤ k := by
+      have r_lt : ∀ lk, lk ∈ (TreapNode.splitUpper r k).1.all_keys → lk ≤ k := by
 
-        -- Recursively, the splitUpperted part will be less than k
+        -- Recursively, the splitUpperted part will be lt than k
         apply splitUpper_left_le_k
         exact h_2
 
@@ -645,7 +645,7 @@ lemma splitUpper_right_gt_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k :
     -- Complex one
     rw [TreapNode.splitUpper]
     -- Break down the IsBST proof
-    cases tn_proof; rename_i l_proof l_less r_proof r_ge
+    cases tn_proof; rename_i l_proof l_lt r_proof r_ge
     split_ifs <;> simp_all
     · exact splitUpper_right_gt_k r r_proof k
     · unfold TreapNode.all_keys
@@ -665,6 +665,41 @@ lemma splitUpper_right_gt_k (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k :
         · simp_all
         · grind
 
+-- All keys are union in a splitUpper
+theorem all_keys_union_splitUpper (node : TreapNode Key Prio) (k : Key) :
+  (node.splitUpper k).1.all_keys ∪ (node.splitUpper k).2.all_keys = node.all_keys := by
+  rw [TreapNode.all_keys.eq_def node]
+  match node with
+  | Tree.nil =>
+    simp [TreapNode.splitUpper, TreapNode.all_keys]
+  | Tree.node kp l r =>
+    unfold TreapNode.splitUpper; split_ifs <;> expose_names
+    · simp_rw [TreapNode.all_keys] -- gives a better result in this case (simp puts insert ...) tactic found the first time in https://github.com/nielsvoss/lean-pitfalls?tab=readme-ov-file#rewriting-under-binders
+      have : (TreapNode.splitUpper r k).1.all_keys ∪ (TreapNode.splitUpper r k).2.all_keys = TreapNode.all_keys r := by
+        exact all_keys_union_splitUpper r k
+      rw [← this]
+      grind
+    · simp_rw [TreapNode.all_keys]
+      have : (TreapNode.splitUpper l k).1.all_keys ∪ (TreapNode.splitUpper l k).2.all_keys = TreapNode.all_keys l := by
+        exact all_keys_union_splitUpper l k
+      rw [← this]
+      grind
+
+-- Keys are not duplicated in splitUppers (requires IsBST)
+theorem all_keys_inter_splitUpper (node : TreapNode Key Prio) (bst : IsBST node) (k : Key) :
+  (node.splitUpper k).1.all_keys ∩ (node.splitUpper k).2.all_keys = ∅ := by
+  match node with
+  | Tree.nil =>
+    simp [TreapNode.splitUpper, TreapNode.all_keys]
+  | Tree.node kp l r =>
+    have splitUpper_l_lt_r :
+      ∀ kl ∈ (TreapNode.splitUpper (Tree.node kp l r) k).1.all_keys,
+      ∀ kr ∈ (TreapNode.splitUpper (Tree.node kp l r) k).2.all_keys, kl < kr := by
+      intro kl hkl kr hkr
+      apply Std.lt_of_le_of_lt -- convert < to (< k, k ≤)
+      · exact splitUpper_left_le_k (Tree.node kp l r) bst k kl hkl
+      · exact splitUpper_right_gt_k (Tree.node kp l r) bst k kr hkr
+    grind
 
 /-
   Split correctness
@@ -745,7 +780,7 @@ theorem split_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn) (k :
 /-
   SplitUpper correctness
 
-  Again, the code is copy-pasted from the split variant
+  Again, the code is mostly copy-pasted from the split variant
 -/
 
 -- Splitting creates a BST on the left
@@ -819,43 +854,6 @@ theorem splitUpper_IsHeap_right (tn : TreapNode Key Prio) (tn_proof : IsHeap tn)
     · simp_all
     · exact ih1
     · simp_all
-
-
--- All keys are union in a splitUpper
-theorem all_keys_union_splitUpper (node : TreapNode Key Prio) (k : Key) :
-  (node.splitUpper k).1.all_keys ∪ (node.splitUpper k).2.all_keys = node.all_keys := by
-  rw [TreapNode.all_keys.eq_def node]
-  match node with
-  | Tree.nil =>
-    simp [TreapNode.splitUpper, TreapNode.all_keys]
-  | Tree.node kp l r =>
-    unfold TreapNode.splitUpper; split_ifs <;> expose_names
-    · simp_rw [TreapNode.all_keys] -- gives a better result in this case (simp puts insert ...) tactic found the first time in https://github.com/nielsvoss/lean-pitfalls?tab=readme-ov-file#rewriting-under-binders
-      have : (TreapNode.splitUpper r k).1.all_keys ∪ (TreapNode.splitUpper r k).2.all_keys = TreapNode.all_keys r := by
-        exact all_keys_union_splitUpper r k
-      rw [← this]
-      grind
-    · simp_rw [TreapNode.all_keys]
-      have : (TreapNode.splitUpper l k).1.all_keys ∪ (TreapNode.splitUpper l k).2.all_keys = TreapNode.all_keys l := by
-        exact all_keys_union_splitUpper l k
-      rw [← this]
-      grind
-
--- Keys are not duplicated in splitUppers (requires IsBST)
-theorem all_keys_inter_splitUpper (node : TreapNode Key Prio) (bst : IsBST node) (k : Key) :
-  (node.splitUpper k).1.all_keys ∩ (node.splitUpper k).2.all_keys = ∅ := by
-  match node with
-  | Tree.nil =>
-    simp [TreapNode.splitUpper, TreapNode.all_keys]
-  | Tree.node kp l r =>
-    have splitUpper_l_lt_r :
-      ∀ kl ∈ (TreapNode.splitUpper (Tree.node kp l r) k).1.all_keys,
-      ∀ kr ∈ (TreapNode.splitUpper (Tree.node kp l r) k).2.all_keys, kl < kr := by
-      intro kl hkl kr hkr
-      apply Std.lt_of_le_of_lt -- convert < to (< k, k ≤)
-      · exact splitUpper_left_le_k (Tree.node kp l r) bst k kl hkl
-      · exact splitUpper_right_gt_k (Tree.node kp l r) bst k kr hkr
-    grind
 
 /-
   Merge correctness
@@ -999,7 +997,7 @@ def Treap.singleton (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
 
   { root := root, is_treap := treap_proof }
 
--- Leftmost doesn't need correctness proofs here, doesn't produce treaps
+-- Leftmost doesn't need correctness proofs here as it doesn't produce new treaps
 def Treap.leftmost (t : Treap Key Prio) : Option (KeyPrioPair Key Prio) :=
   -- Delegate the call
   TreapNode.leftmost t.root
@@ -1090,34 +1088,34 @@ def Treap.find (t : Treap Key Prio) (k : Key) : Option (KeyPrioPair Key Prio) :=
 def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
   let split_l_key := t.split kp.key
   -- Save split proofs
-  have l_less_k := split_left_lt_k t.root t.is_treap.2 kp.key
+  have l_lt_k := split_left_lt_k t.root t.is_treap.2 kp.key
   have r_ge_k := split_right_ge_k t.root t.is_treap.2 kp.key
 
   let split_key_r := t.splitUpper kp.key
   -- Save splitUpper proofs
   have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 kp.key
-  have r_greater_k := splitUpper_right_gt_k t.root t.is_treap.2 kp.key
+  have r_gt_k := splitUpper_right_gt_k t.root t.is_treap.2 kp.key
 
   let new_node := Treap.singleton kp
 
   -- We need new_node < r
-  have kp_less_r : (∀ kl ∈ new_node.root.all_keys, ∀ kr ∈ TreapNode.all_keys split_key_r.2.root, kl < kr) := by
+  have kp_lt_r : (∀ kl ∈ new_node.root.all_keys, ∀ kr ∈ TreapNode.all_keys split_key_r.2.root, kl < kr) := by
     subst new_node
     subst split_key_r
     subst split_l_key
     simp_all [Treap.singleton, TreapNode.singleton, TreapNode.all_keys]
-    exact r_greater_k
+    exact r_gt_k
 
-  let merged_right := Treap.merge new_node split_key_r.2 kp_less_r -- First merge right (ensures l < r)
+  let merged_right := Treap.merge new_node split_key_r.2 kp_lt_r -- First merge right (ensures l < r)
 
   -- We need l < new_node ∪ r
-  have l_less_kp_r : (∀ kl ∈ TreapNode.all_keys split_l_key.1.root, ∀ kr ∈ merged_right.root.all_keys, kl < kr) := by
+  have l_lt_kp_r : (∀ kl ∈ TreapNode.all_keys split_l_key.1.root, ∀ kr ∈ merged_right.root.all_keys, kl < kr) := by
     subst merged_right
     subst new_node
     subst split_key_r
     subst split_l_key
     simp_all [Treap.merge, Treap.split, Treap.singleton, TreapNode.singleton, TreapNode.all_keys]
-    simp [Treap.singleton, TreapNode.singleton, TreapNode.all_keys] at kp_less_r
+    simp [Treap.singleton, TreapNode.singleton, TreapNode.all_keys] at kp_lt_r
     suffices ∀ kl ∈ (t.root.split kp.key).1.all_keys, kl < kp.key by
       rw [← all_keys_union_merge]
       simp_all only [Set.mem_union]
@@ -1131,30 +1129,30 @@ def Treap.insert (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Pr
       · grind
     simp_all
 
-  Treap.merge split_l_key.1 merged_right l_less_kp_r
+  Treap.merge split_l_key.1 merged_right l_lt_kp_r
 
 -- Deletes the key only if it exists, otherwise doesn't do anything
-def Treap.delete (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Prio :=
-  let split_l_key := t.split kp.key
+def Treap.delete (t : Treap Key Prio) (k : Key) : Treap Key Prio :=
+  let split_l_key := t.split k
   -- Save split proofs
-  have l_less_k := split_left_lt_k t.root t.is_treap.2 kp.key
-  have r_ge_k := split_right_ge_k t.root t.is_treap.2 kp.key
+  have l_lt_k := split_left_lt_k t.root t.is_treap.2 k
+  have r_ge_k := split_right_ge_k t.root t.is_treap.2 k
 
-  let split_key_r := t.splitUpper kp.key
+  let split_key_r := t.splitUpper k
   -- Save splitUpper proofs
-  have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 kp.key
-  have r_greater_k := splitUpper_right_gt_k t.root t.is_treap.2 kp.key
+  have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 k
+  have r_gt_k := splitUpper_right_gt_k t.root t.is_treap.2 k
 
   -- We need new_node < r
-  have l_less_r : (∀ kl ∈ TreapNode.all_keys split_l_key.1.root, ∀ kr ∈ TreapNode.all_keys split_key_r.2.root, kl < kr) := by
+  have l_lt_r : (∀ kl ∈ TreapNode.all_keys split_l_key.1.root, ∀ kr ∈ TreapNode.all_keys split_key_r.2.root, kl < kr) := by
     intro kl hkl kr hkr
-    trans kp.key
+    trans k
     · revert kl hkl
       assumption
     · revert kr hkr
       assumption
 
-  Treap.merge split_l_key.1 split_key_r.2 l_less_r
+  Treap.merge split_l_key.1 split_key_r.2 l_lt_r
 
 /-
   Operation correctness - Behavioral correctness
@@ -1163,53 +1161,58 @@ def Treap.delete (t : Treap Key Prio) (kp : KeyPrioPair Key Prio) : Treap Key Pr
   Same reasoning for insert, delete, ...
 -/
 
-def opt_get_key (okp : Option (KeyPrioPair Key Prio)) :=
+/-
+  More helpers, mostly for leftmost and split-splitUpper equivalences
+
+-/
+
+def get_key (okp : Option (KeyPrioPair Key Prio)) :=
   match okp with
   | none => none
   | some kp => some kp.key
 
 theorem leftmost_in_all_keys (tn : TreapNode Key Prio) :
-  ∀ k : Key, opt_get_key tn.leftmost = some k → k ∈ tn.all_keys := by
+  ∀ k : Key, get_key tn.leftmost = some k → k ∈ tn.all_keys := by
   match tn with
-  | Tree.nil => simp_all [opt_get_key, TreapNode.leftmost]
+  | Tree.nil => simp_all [get_key, TreapNode.leftmost]
   | Tree.node kp l r =>
     simp_all [TreapNode.leftmost]
     split
-    · simp_all [opt_get_key, TreapNode.all_keys]
+    · simp_all [get_key, TreapNode.all_keys]
     · rw [TreapNode.all_keys]
       rename_i kp' l' r'
       suffices ∀ (k : Key),
-        opt_get_key (TreapNode.leftmost (node kp' l' r')) = some k →
+        get_key (TreapNode.leftmost (node kp' l' r')) = some k →
         k ∈ TreapNode.all_keys (node kp' l' r') by grind
       apply leftmost_in_all_keys
 
 -- The leftmost key is the smallest key in the treap
 theorem leftmost_is_smallest (tn : TreapNode Key Prio) (tn_bst : IsBST tn) :
-  ∀ k ∈ tn.all_keys, opt_get_key tn.leftmost ≤ some k := by
+  ∀ k ∈ tn.all_keys, get_key tn.leftmost ≤ some k := by
   fun_induction TreapNode.leftmost
   · simp [TreapNode.all_keys]
-  · simp [TreapNode.all_keys, opt_get_key]
-    cases tn_bst; rename_i l_proof l_keys_less r_proof r_keys_ge
+  · simp [TreapNode.all_keys, get_key]
+    cases tn_bst; rename_i l_proof l_keys_lt r_proof r_keys_ge
     grind
   · rename_i kp tn_2 kp_1 l_1 r_1 ih
     intro k hk
 
     -- If none, if some
-    unfold opt_get_key; unfold opt_get_key at ih; split
+    unfold get_key; unfold get_key at ih; split
     · trivial
 
     -- Each case (left, root, right)
     simp_all only [Option.some_le_some]
     cases hk <;> rename_i hk; try cases hk <;> rename_i hk
-    · cases tn_bst; rename_i l_proof l_keys_less r_proof r_keys_ge
+    · cases tn_bst; rename_i l_proof l_keys_lt r_proof r_keys_ge
       simp_all
-    · cases tn_bst; rename_i l_proof l_keys_less r_proof r_keys_ge
+    · cases tn_bst; rename_i l_proof l_keys_lt r_proof r_keys_ge
       rename_i okp kp' heq
       simp_all
       refine Std.le_of_lt ?_
-      refine l_keys_less kp'.key ?_
+      refine l_keys_lt kp'.key ?_
       apply leftmost_in_all_keys
-      simp_all [opt_get_key]
+      simp_all [get_key]
     · rename_i okp kp' heq
 
       have := left_lt_right (node kp (node kp_1 l_1 r_1) tn_2) tn_bst kp'.key ?_
@@ -1218,7 +1221,7 @@ theorem leftmost_is_smallest (tn : TreapNode Key Prio) (tn_bst : IsBST tn) :
       · grind
       · simp [TreapNode.all_keys_left]
         apply leftmost_in_all_keys
-        simp_all [opt_get_key]
+        simp_all [get_key]
 
 lemma leftmost_eq_none_iff (tn : TreapNode Key Prio) :
   TreapNode.leftmost tn = none ↔ tn = Tree.nil := by
@@ -1233,28 +1236,25 @@ lemma leftmost_eq_none_iff (tn : TreapNode Key Prio) :
 
 -- The smallest key in the treap is the leftmost key (proof is similar to the previous one)
 theorem smallest_is_leftmost (tn : TreapNode Key Prio) (tn_bst : IsBST tn) (k : Key) (hk : k ∈ tn.all_keys) (smallest : ∀ x, x ∈ tn.all_keys → k ≤ x) :
-  opt_get_key tn.leftmost = some k := by
+  get_key tn.leftmost = some k := by
   cases hlm : TreapNode.leftmost tn
-  · simp_all [opt_get_key, leftmost_eq_none_iff, TreapNode.all_keys]
+  · simp_all [get_key, leftmost_eq_none_iff, TreapNode.all_keys]
   · rename_i kp
     -- kp.key is in all_keys
     have hkp_mem : kp.key ∈ tn.all_keys := by
       apply leftmost_in_all_keys
-      simp [opt_get_key, hlm]
+      simp [get_key, hlm]
 
     -- get kp.key ≤ k with leftmost_is_smallest
     have h_lm_le_k : kp.key ≤ k := by
       have h := leftmost_is_smallest tn tn_bst k hk
-      simp_all [opt_get_key]
+      simp_all [get_key]
 
     -- smallest gives k ≤ kp.key
     have h_k_le_lm : k ≤ kp.key := smallest kp.key hkp_mem
 
     have hkpeq : kp.key = k := le_antisymm h_lm_le_k h_k_le_lm
-    simp [opt_get_key, hkpeq]
-
--- TODO: maybe show that doing ops on t.root is the same as doing them on t (nah, just needs a simp [Treap.xxx])
--- We don't prove priorities stay the same with insert/delete: it is not needed for the correctness of the data structure
+    simp [get_key, hkpeq]
 
 -- split and splitUpper are exactly the same if the key element is not in the treap
 lemma split_eq_splitUpper_if_no_k (tn : TreapNode Key Prio) (k : Key) :
@@ -1359,7 +1359,14 @@ lemma all_keys_eq_split_splitUpper_r (tn : TreapNode Key Prio) (k : Key) (bst : 
       · simp_all
       · grind
 
--- Stricter condition, implies the other keys don't change
+-- Note: we only prove correctness for keys (and not for priorities) as it is not needed for the correctness of the data structure
+
+/-
+  Insert correctness
+
+  Inserting an element adds it to the set of keys of the treap, regardlt of whether it was already present or not
+
+-/
 theorem insert_inserts_element (t : Treap Key Prio) (ins_kp : KeyPrioPair Key Prio) :
   (Treap.insert t ins_kp).root.all_keys = (t.root.all_keys \ {ins_kp.key}) ∪ {ins_kp.key} := by
   -- Split inequalities
@@ -1392,16 +1399,21 @@ theorem insert_inserts_element (t : Treap Key Prio) (ins_kp : KeyPrioPair Key Pr
 
     grind
 
+/-
+  Delete correctness
 
-theorem delete_deletes_element (t : Treap Key Prio) (del_kp : KeyPrioPair Key Prio) :
-  (Treap.delete t del_kp).root.all_keys = t.root.all_keys \ {del_kp.key} := by
+  Deleting an element removes it from the set of keys of the treap, if it was present
+
+-/
+theorem delete_deletes_element (t : Treap Key Prio) (del_key : Key) :
+  (Treap.delete t del_key).root.all_keys = t.root.all_keys \ {del_key} := by
     -- Split inequalities
-  have l_lt_k := split_left_lt_k t.root t.is_treap.2 del_kp.key
-  have r_ge_k := split_right_ge_k t.root t.is_treap.2 del_kp.key
+  have l_lt_k := split_left_lt_k t.root t.is_treap.2 del_key
+  have r_ge_k := split_right_ge_k t.root t.is_treap.2 del_key
 
   -- SplitUpper inequalities
-  have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 del_kp.key
-  have r_gt_k := splitUpper_right_gt_k t.root t.is_treap.2 del_kp.key
+  have l_le_k := splitUpper_left_le_k t.root t.is_treap.2 del_key
+  have r_gt_k := splitUpper_right_gt_k t.root t.is_treap.2 del_key
 
   -- Unfold all Treap definitions, get only the TreapNode ones
   simp_all [Treap.delete, Treap.split, Treap.merge, Treap.splitUpper]
@@ -1409,30 +1421,35 @@ theorem delete_deletes_element (t : Treap Key Prio) (del_kp : KeyPrioPair Key Pr
   rw [← all_keys_union_merge]
 
   -- Again, prove by cases
-  by_cases hc : del_kp.key ∉ t.root.all_keys
-  · rw [← split_eq_splitUpper_if_no_k t.root del_kp.key hc]
+  by_cases hc : del_key ∉ t.root.all_keys
+  · rw [← split_eq_splitUpper_if_no_k t.root del_key hc]
     rw [Set.diff_singleton_eq_self hc]
-    exact all_keys_union_split t.root del_kp.key
+    exact all_keys_union_split t.root del_key
   · rw [not_not] at hc
-    rw [← all_keys_union_split t.root del_kp.key]
-    rw [all_keys_eq_split_splitUpper_r t.root del_kp.key t.is_treap.2 hc]
+    rw [← all_keys_union_split t.root del_key]
+    rw [all_keys_eq_split_splitUpper_r t.root del_key t.is_treap.2 hc]
     grind
 
 
--- Find returns the key iff the key is present in the treap
+/-
+  Find correctness
+
+  Find k returns a key-priority pair with key k iff k is present in the treap
+
+-/
 theorem find_finds_element (t : Treap Key Prio) (k : Key) :
-  opt_get_key (Treap.find t k) = some k ↔ k ∈ t.root.all_keys := by
+  get_key (Treap.find t k) = some k ↔ k ∈ t.root.all_keys := by
   unfold Treap.find
   simp only
 
   -- Split inequalities
-  have l_less_k := split_left_lt_k t.root t.is_treap.2 k
+  have l_lt_k := split_left_lt_k t.root t.is_treap.2 k
   have r_ge_k := split_right_ge_k t.root t.is_treap.2 k
 
   split <;> expose_names
   · -- None case
     rw [leftmost_eq_none_iff] at heq
-    simp_all [TreapNode.all_keys, opt_get_key, Treap.split]
+    simp_all [TreapNode.all_keys, get_key, Treap.split]
     rw [← all_keys_union_split t.root k]
     suffices k ∉ (t.root.split k).1.all_keys ∧ k ∉ (t.root.split k).2.all_keys by grind
     constructor
@@ -1444,7 +1461,7 @@ theorem find_finds_element (t : Treap Key Prio) (k : Key) :
   · -- Some case
     split <;> expose_names
     · -- Element found
-      simp_all [opt_get_key]
+      simp_all [get_key]
       rw [← h]
       have := all_keys_subset_split_r t.root (t.split k).2.root k (by simp [Treap.split])
       grw [← this]
@@ -1452,7 +1469,7 @@ theorem find_finds_element (t : Treap Key Prio) (k : Key) :
       rw [heq]
       rfl
     · -- Element not found
-      simp_all [opt_get_key]
+      simp_all [get_key]
       rw [← all_keys_union_split t.root k]
       suffices k ∉ (t.root.split k).1.all_keys ∧ k ∉ (t.root.split k).2.all_keys by grind
       constructor
@@ -1465,7 +1482,7 @@ theorem find_finds_element (t : Treap Key Prio) (k : Key) :
           -- k is the leftmost
           have k_leftmost := smallest_is_leftmost (t.root.split k).2 (t.split k).2.is_treap.2 k hc r_ge_k
           -- kp is the leftmost too
-          have kp_leftmost : opt_get_key (t.root.split k).2.leftmost = some kp.key := by
+          have kp_leftmost : get_key (t.root.split k).2.leftmost = some kp.key := by
             rw [heq]
             rfl
           -- then they must be equal
@@ -1476,9 +1493,22 @@ theorem find_finds_element (t : Treap Key Prio) (k : Key) :
 /-
   Operations time complexity
 
+  Theorems are provided for
+  - leftmost
+  - split
+  - splitUpper
+  - merge
+
+  For each method, two theorems are provided:
+  - correctness: the TimeM version has the same behavior as the original version
+  - time: the TimeM version is bounded by O(height)
+
 -/
 
--- lenT with do notations
+/-
+  Leftmost complexity
+
+-/
 def leftmostT (tn : TreapNode Key Prio) : TimeM (Option (KeyPrioPair Key Prio)) := do
   match tn with
   | Tree.nil => return none
@@ -1524,6 +1554,10 @@ theorem leftmostT_time (tn : TreapNode Key Prio) : (leftmostT tn).time ≤ 1 + t
       simp_all [Tree.height]
       omega
 
+/-
+  Split complexity
+
+-/
 def splitT (tn : TreapNode Key Prio) (k : Key) : TimeM (TreapNode Key Prio × TreapNode Key Prio) := do
   match tn with
   | Tree.nil => return (Tree.nil, Tree.nil)
@@ -1565,6 +1599,10 @@ theorem splitT_time (tn : TreapNode Key Prio) (k : Key) : (splitT tn k).time ≤
     · grw [splitT_time]
       omega
 
+/-
+  SplitUpper complexity
+
+-/
 def splitUpperT (tn : TreapNode Key Prio) (k : Key) : TimeM (TreapNode Key Prio × TreapNode Key Prio) := do
   match tn with
   | Tree.nil => return (Tree.nil, Tree.nil)
@@ -1606,6 +1644,10 @@ theorem splitUpperT_time (tn : TreapNode Key Prio) (k : Key) : (splitUpperT tn k
     · grw [splitUpperT_time]
       omega
 
+/-
+  Merge complexity
+
+-/
 def mergeT (l r : TreapNode Key Prio) : TimeM (TreapNode Key Prio) := do
   match l, r with
   | Tree.nil, Tree.nil => return Tree.nil
@@ -1637,7 +1679,7 @@ theorem mergeT_correctness (l r : TreapNode Key Prio) : (mergeT l r).ret = Treap
     · exact mergeT_correctness (node kp_1 l_1 r_1) l_2
 
 -- Prove the mergeT is bounded by sum of heights
-theorem mergeT_time (l r : TreapNode Key Prio) (k : Key) : (mergeT l r).time ≤ l.height + r.height := by
+theorem mergeT_time (l r : TreapNode Key Prio) : (mergeT l r).time ≤ l.height + r.height := by
   match l, r with
   | Tree.nil, Tree.nil
   | Tree.nil, Tree.node _ _ _
@@ -1645,499 +1687,54 @@ theorem mergeT_time (l r : TreapNode Key Prio) (k : Key) : (mergeT l r).time ≤
   | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
     simp_all [mergeT, bind, TimeM.tick]
     split_ifs <;> simp [TimeM.time_of_bind]
-    · grw [mergeT_time r_1 (node kp_2 l_2 r_2) k]
+    · grw [mergeT_time r_1 (node kp_2 l_2 r_2)]
       simp only [height]
       ring_nf
       omega
-    · grw [mergeT_time (node kp_1 l_1 r_1) l_2 k]
+    · grw [mergeT_time (node kp_1 l_1 r_1) l_2]
       simp only [height]
       ring_nf
       omega
-
--- TODO: TreapNode.insert + TreapNode.delete time complexity
--- TODO: show that you have greatest as last element + smallest as first
--- TODO: maybe prove that merge of split is the same
--- or split of merge
--- TODO: sorted_l_r ENFORCES UNIQUENESS!
--- TODO: prove that it works only if the key is present?
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /-
-  RandomTreap
+  Small bridge for the probabilistic model and deterministic model
 
-  Augment the Treap to use uniformly random priorities, prove that height is bounded by O(log(N))
+  probabilistic.lean defines a model where priorities are given by a random permutation of Fin n
+
+  Here we show that model is a special case of our Treap implementation (and indeed satisfies all treap properties) by providing functions to build a treap from such a permutation
+
+  buildRandomTreapOn allows to build a random treap on any key type by providing an order isomorphism from Fin n to the key type
 -/
 
--- Reuse variable for size of treap
 variable {n : ℕ}
 local notation "Ω" => Equiv.Perm (Fin n)
 
-structure RandomTreap (Key : Type) (Prio : Type) [LinearOrder Key] [LinearOrder Prio] where
-  treap: Treap Key Prio
-  size: ℕ := n -- default value
-  prio_func: Ω
-
--- The set is finite, enforce it to allow counting
-def TreapNode.keys_finset : TreapNode Key Prio → Finset Key
-  | Tree.nil => ∅
-  | Tree.node kp l r => (keys_finset l) ∪ {kp.key} ∪ (keys_finset r)
-
--- The cardinality of keys_finset is the size of the treap
--- It will be implicitly passed to functions that need it
-
--- all_keys is already a set, prove they are equal
-lemma keys_finset_eq_all_keys (t : TreapNode Key Prio) :
-  (t.keys_finset : Set Key) = t.all_keys := by
-  induction t with
-  | nil => simp [TreapNode.keys_finset, TreapNode.all_keys]
-  | node kp l r ihl ihr =>
-    simp [TreapNode.keys_finset, TreapNode.all_keys, ihl, ihr]
-    rw [← Set.insert_union]
-
-/-
-  Step 1: Define rank based on keys_finset
-
--/
-
--- Prove rank is less than size, if the element is present
--- Note that now everything is based on the key set!
-lemma rank_less_size (t : TreapNode Key Prio) (k : Key) (h : k ∈ t.keys_finset) :
-  (t.keys_finset.filter (fun key => key < k)).card < t.keys_finset.card := by
-  -- (t.keys_finset.filter (fun key => key < k)).card < n := by
-  apply Finset.card_lt_card
-  grind
-
--- Define rank of a key in the treap (number of keys < k)
--- We don't need it to be efficient, since we only use it for proofs
-def TreapNode.rank (t : TreapNode Key Prio) (k : Key)
-  (h : k ∈ t.keys_finset) (n_size : t.keys_finset.card = n) : Fin n :=
-  let num := (t.keys_finset.filter (fun key => key < k)).card
-  let proof_card := rank_less_size t k h
-
-  have proof_n : num < n := by
-    rw [← n_size]
-    exact proof_card
-
-  { val := num,
-    isLt := proof_n }
-
-/-
-  Step 2: Define ancestorship based on priorities
-
--/
-
--- We don't even need a valid treap!
--- def is_ancestor (anc k : Fin n) :
---   Bool :=
---   let ranks := Finset.Icc anc k
---   ∀ p ∈ ranks, σ p ≤ σ anc
-
--- /-
---   Step 3: Define depth based on ancestorship
-
--- -/
-
--- def depth (k : Fin n) : ℕ :=
---   -- ∑ j : Fin n, -- same def
---   ∑ j ∈ Finset.univ,
---     if is_ancestor σ j k then 1 else 0
-
-/-
-  Step 4: Assign priorities as a function of ranks by mapping σ to a random permutation
-
--/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
--- TODO: also uniqueness?
-
-/-
-  Merge and Split are inverse
-  whattodo -- do i need this? also, treap that has only different priorities, do I need it??
--/
--- theorem merge_inv_split_left (k : Key) (kp : KeyPrioPair Key Prio) (l' r' : Tree (KeyPrioPair Key Prio)) (h : kp.key < k) :
---   node kp l' r' = TreapNode.merge (node kp l' (TreapNode.split r' k).1) (TreapNode.split r' k).2 := by
---   fun_induction TreapNode.merge
---   · grind
---   · grind
-
-
-lemma kp_eq (a b : KeyPrioPair Key Prio) : a = b ↔ (a.key = b.key) ∧ (a.prio = b.prio) := by
-  constructor
-  · intro h
-    subst h
-    simp_all only [and_self]
-  · intro h
-    cases a
-    simp_all
-
-
--- TODO: root and prio and key?? idk multiple defs..
--- TODO extra
-inductive DistinctPrios : TreapNode Key Prio → Prop
-  | nil : DistinctPrios Tree.nil
-  | node (tn : KeyPrioPair Key Prio) (l r : TreapNode Key Prio) :
-    -- Recursively unique
-    DistinctPrios l →
-    DistinctPrios r →
-    -- Root priority is not in children
-    tn.prio ∉ l.all_prios →
-    tn.prio ∉ r.all_prios →
-    -- Left and Right priority sets don't overlap
-    Disjoint l.all_prios r.all_prios →
-    DistinctPrios (Tree.node tn l r)
-
-
-lemma roots_eq_prio (a b : TreapNode Key Prio)
-  (a_dip : DistinctPrios a) (b_dip : DistinctPrios b) (ab_nodes : a.all_nodes = b.all_nodes) :
-  a.root = b.root ↔ (a.prio = b.prio) := by
-  sorry
-  -- constructor
-  -- · intro h
-  --   subst h
-  --   simp_all only
-  -- · intro h
-  --   match a, b with
-  --   | Tree.nil, Tree.nil => sorry
-  --   | Tree.nil, Tree.node kp l r => sorry
-  --   | Tree.node kp l r, Tree.nil => sorry
-  --   | Tree.node kp_1 l_1 r_1, kp_2 l_2 r_2 =>
-  --     sorry
-
--- TODO show strict inequality when DistinctPrios
-lemma prio_max (tn : TreapNode Key Prio) (tn_heap : IsHeap tn) (tn_dip : DistinctPrios tn) :
-  ∀ p ∈ tn.all_prios_left ∪ tn.all_prios_right, p < tn.prio := by
-  match tn with
-  | Tree.nil => simp_all [TreapNode.all_prios_left, TreapNode.all_prios_right]
-  | Tree.node kp l r =>
-    cases tn_heap; rename_i l_heap l_ge r_heap r_ge
-    by_cases hc : kp.prio ∈ TreapNode.all_prios_left (node kp l r) ∪ TreapNode.all_prios_right (node kp l r)
-    · simp_all [TreapNode.all_prios_left, TreapNode.all_prios_right, TreapNode.prio]
-      suffices ∀ p ∈ TreapNode.all_prios l ∪ TreapNode.all_prios r, p ≠ kp.prio by grind
-      cases tn_dip; rename_i l_dip l_nin r_dip r_nin disj
-      simp_all
-    · simp_all [TreapNode.all_prios_left, TreapNode.all_prios_right, TreapNode.prio]
-      grind
-
-lemma all_nodes_set_eq_all_prios (t : TreapNode Key Prio) :
-  Set.image (fun n : KeyPrioPair Key Prio => n.prio) t.all_nodes = t.all_prios := by
-  sorry
-
-lemma same_nodes_same_root (a b : TreapNode Key Prio)
-  (a_bst : IsBST a) (b_bst : IsBST b)
-  (a_heap : IsHeap a) (b_heap : IsHeap b)
-  (a_dip : DistinctPrios a) (b_dip : DistinctPrios b) :
-  a.all_nodes = b.all_nodes → a.root = b.root := by
-  intro hs
-  match a, b with
-  | Tree.nil, Tree.nil => simp_all only
-  | Tree.nil, Tree.node kp l r
-  | Tree.node kp l r, Tree.nil =>
-    exfalso
-    have h : kp ∈ (TreapNode.all_nodes l ∪ {kp} ∪ TreapNode.all_nodes r) := by
-      simp
-    unfold TreapNode.all_nodes at hs
-    -- satisfy both cases
-    try rw [← hs] at h; assumption
-    try rw [hs] at h; assumption
-  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
-    -- simp_all [TreapNode.root]
-    -- root node is unique, extract it
-    have a_max := prio_max (node kp_1 l_1 r_1) a_heap a_dip
-    have b_max := prio_max (node kp_2 l_2 r_2) b_heap b_dip
-    simp_all
-    rw [roots_eq_prio (node kp_1 l_1 r_1) (node kp_2 l_2 r_2) a_dip b_dip hs]
-
-    have h_prio_sets_eq : TreapNode.all_prios (node kp_1 l_1 r_1) = TreapNode.all_prios (node kp_2 l_2 r_2) := by
-      -- "Image of nodes(A) = Prios(A)"
-      rw [← all_nodes_set_eq_all_prios (node kp_1 l_1 r_1)]
-      -- "Image of nodes(B) = Prios(B)"
-      rw [← all_nodes_set_eq_all_prios (node kp_2 l_2 r_2)]
-      -- Since nodes(A) = nodes(B) (hs), the images must be equal
-      rw [hs]
-
-    -- Now we can use the equality of prio sets to show prio equality
-    simp_all [TreapNode.prio, TreapNode.all_prios]
-    sorry
-
--- TODO: harden prio to have only different elements
-
--- Same nodes has same morphology
-theorem same_nodes_same_treap (a b : TreapNode Key Prio)
-  (a_bst : IsBST a) (b_bst : IsBST b)
-  (a_heap : IsHeap a) (b_heap : IsHeap b) :
-  a.all_nodes = b.all_nodes ↔ a = b := by
-  -- TODO: rewrite with match
-  constructor
-  · intro hs
-    cases a
-    · -- a is nil
-      simp_all [TreapNode.all_nodes]
-      cases b
-      · -- b is nil
-        rfl
-      · -- b is node
-        rename_i kp l r
-        exfalso
-        have h : kp ∈ (TreapNode.all_nodes l ∪ {kp} ∪ TreapNode.all_nodes r) := by
-          simp
-        unfold TreapNode.all_nodes at hs
-        rw [← hs] at h
-        assumption
-    · -- a is node
-      cases b
-      · -- b is nil
-        rename_i kp l r
-        exfalso
-        have h : kp ∈ (TreapNode.all_nodes l ∪ {kp} ∪ TreapNode.all_nodes r) := by
-          simp
-        unfold TreapNode.all_nodes at hs
-        rw [hs] at h
-        assumption
-      · -- b is node
-        rename_i kp_1 l_1 r_1 kp_2 l_2 r_2
-        simp only [node.injEq]
-        cases a_bst; rename_i l_1_bst _ r_1_bst _
-        cases b_bst; rename_i l_2_bst _ r_2_bst _
-        cases a_heap; rename_i l_1_heap _ r_1_heap _
-        cases b_heap; rename_i l_2_heap _ r_2_heap _
-        constructor <;> all_goals (try constructor)
-        · simp_all [TreapNode.all_nodes]
-          sorry
-        · rw [← same_nodes_same_treap l_1 l_2 l_1_bst l_2_bst l_1_heap l_2_heap]
-          simp_all [TreapNode.all_nodes]
-          sorry
-        · sorry
-
-  · simp_all
-
-lemma merge_chooses_left_root (l r : TreapNode Key Prio) (h_prio : l.prio ≥ r.prio) :
-  (TreapNode.merge l r).root = l.root := by
-  match l, r with
-  | Tree.nil, Tree.nil
-  | Tree.nil, Tree.node _ _ _
-  | Tree.node _ _ _, Tree.nil => simp_all [TreapNode.merge, TreapNode.prio]
-  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
-    unfold TreapNode.merge; split_ifs <;> rename_i h_if
-    · simp_all only [ge_iff_le]
-      rfl
-    · simp_all [TreapNode.prio]
-
-lemma merge_chooses_right_root (l r : TreapNode Key Prio) (h_prio : l.prio < r.prio) :
-  (TreapNode.merge l r).root = r.root := by
-  match l, r with
-  | Tree.nil, Tree.nil
-  | Tree.nil, Tree.node _ _ _
-  | Tree.node _ _ _, Tree.nil => simp_all [TreapNode.merge, TreapNode.prio]
-  | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
-    unfold TreapNode.merge; split_ifs <;> rename_i h_if
-    · simp_all [TreapNode.prio]
-      grind
-    · simp_all [TreapNode.prio]
-      rfl
-
--- lemma merge_chooses_left_root (tn l r : TreapNode Key Prio) (h_prio : l.prio ≥ r.prio) :
---   (TreapNode.merge l r) = tn → tn.prio = l.prio := by
---   match l, r with
---   | Tree.nil, Tree.nil
---   | Tree.nil, Tree.node _ _ _
---   | Tree.node _ _ _, Tree.nil => intro tn; subst tn; simp_all [TreapNode.merge, TreapNode.prio]
---   | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
---     intro tn; subst tn
---     unfold TreapNode.merge; split_ifs <;> rename_i h_if
---     · simp_all only [ge_iff_le]
---       rfl
---     · simp_all [TreapNode.prio]
-
--- lemma merge_chooses_right_root (tn l r : TreapNode Key Prio) (h_prio : l.prio < r.prio) :
---   (TreapNode.merge l r) = tn → tn.prio = r.prio := by
---   match l, r with
---   | Tree.nil, Tree.nil
---   | Tree.nil, Tree.node _ _ _
---   | Tree.node _ _ _, Tree.nil => intro tn; subst tn; simp_all [TreapNode.merge, TreapNode.prio]
---   | Tree.node kp_1 l_1 r_1, Tree.node kp_2 l_2 r_2 =>
---     intro tn; subst tn
---     unfold TreapNode.merge; split_ifs <;> rename_i h_if
---     · simp_all [TreapNode.prio]
---       grind
---     · simp_all [TreapNode.prio]
-
-
-theorem merge_inv_split (tn : TreapNode Key Prio) (tn_proof : IsBST tn) (k : Key) :
-  let (l, r) := tn.split k;
-  tn = TreapNode.merge l r := by
-  match tn with
-  | Tree.nil =>
-    simp_all [TreapNode.split, TreapNode.merge]
-  | Tree.node kp l r =>
-    have l_less := split_left_lt_k (node kp l r) tn_proof k
-    have r_ge := split_right_ge_k (node kp l r) tn_proof k
-    simp_all
-    -- cases tn_proof; rename_i l_proof l_keys_less r_proof r_keys_ge
-    unfold TreapNode.merge
-    split <;> simp_all -- handle all cases
-    · simp_all [TreapNode.split]
-      aesop
-    · rename_i kp' l' r' eq_l eq_r
-      simp_all [TreapNode.split]
-      sorry
-    · rename_i kp' l' r' eq_l eq_r
-      sorry
-    · rename_i kp_1 l_1 r_1 kp_2 l_2 r_2 eq_l eq_r
-      -- simp_all [TreapNode.split]
-      split_ifs <;> rename_i h_if
-      · rw [← ge_iff_le] at h_if
-        have kp_eq := merge_chooses_left_root (node kp_1 l_1 r_1) (node kp_2 l_2 r_2) h_if
-        simp [TreapNode.root] at kp_eq
-        have kp_eq : kp = kp_1 := by
-          -- rw [← eq_l]
-          -- rw [← eq_r]
-
-
-          sorry
-        have l_eq : l = l_1 := by
-          sorry
-        have r_eq : r = (TreapNode.merge r_1 (node kp_2 l_2 r_2)) := by
-          sorry
-        subst kp_eq l_eq r_eq
-        simp_all only
-      · have kp_eq : kp = kp_2 := by
-          sorry
-        have l_eq : l = (TreapNode.merge (node kp_1 l_1 r_1) l_2) := by
-          sorry
-        have r_eq : r = r_2 := by
-          sorry
-        subst kp_eq l_eq r_eq
-        simp_all only
-
-
-
+-- Show that we can build a random treap by inserting elements with random priorities
+def buildRandomTreap (ω : Ω) : Treap (Fin n) (Fin n) :=
+  (List.finRange n).foldl
+    (fun t k => Treap.insert t { key := k, prio := ω k })
+    (Treap.empty : Treap (Fin n) (Fin n))
+
+-- Show that by providing a key mapping, we can build a random treap on any key type
+-- Then we know that choosing ω at random gives us an expected node depth of O(log n)
+def buildRandomTreapOn (e : Fin n ≃o Key) (ω : Ω) : Treap Key (Fin n) :=
+  (List.finRange n).foldl
+    (fun t k => Treap.insert t { key := e k, prio := ω k })
+    (Treap.empty : Treap Key (Fin n))
 
 /-
   Empirical test
 
+  We can run a small empirical test to see that the height of the treap ≈ log n after inserting and deleting elements
 -/
 
 def main : IO Unit := do
   let mut t : Treap ℕ ℕ := Treap.empty
   let n_elems := 1000000
 
-  for i in [1 : n_elems] do
-    let rand_prio ← IO.rand 0 1000000000
+  for i in [0 : n_elems] do
+    -- Big number to avoid collisions
+    let rand_prio ← IO.rand 0 1000000000000000
     t := t.insert { key := i, prio := rand_prio }
 
   IO.println s!"Done inserting {n_elems} elements."
@@ -2151,12 +1748,12 @@ def main : IO Unit := do
   IO.println s!"Expected Height (approx): {expected}"
 
   -- Remove half elements
-  for i in [n_elems / 4 : n_elems / 4 + n_elems / 2] do
+  for i in [n_elems / 4 : n_elems / 4 + n_elems / 2 + 1] do
     let kp := t.find i
     match kp with
     | none => continue
-    | some kp => do
-      t := t.delete kp
+    | some kp =>
+      t := t.delete kp.key
 
   let h := t.root.height
 

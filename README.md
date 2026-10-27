@@ -7,17 +7,15 @@ Formalization of Analysis of Algorithms - ETH Zurich
     - [x] Basic definitions
     - [x] Split
     - [x] Merge
-    - [x] Insert, delete, Build (optional if you want)
-- [ ] Decide what to do with different or equal keys / prios
+    - [x] Insert, delete
 - [ ] Time complexity of all operations, based on split/merge
     - [x] Leftmost
     - [x] Split
     - [x] Merge
-    - [ ] Insert, delete, Build (optional)
+    - [ ] Insert, delete
 - [ ] RandomizedTreap, prove that expected height is O(log N)
     - [x] Implement the probability part on a different file, with cartesian tree depth proof
-    - [ ] Prove also the height?
-    - [ ] Bridge treap and probabilistic proof
+    - [ ] Bridge treap and probabilistic proof -> build a treap from a permutation / show depth is correct
 
 ## Quick Start
 

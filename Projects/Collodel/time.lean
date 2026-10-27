@@ -11,19 +11,16 @@ namespace TimeM
 
 -- Take type and associate it with 0 (time)
 def pure {α} (a : α) : TimeM α :=
-  ⟨a, 0⟩ -- we don't do anything with the time
+  ⟨a, 0⟩
 
 -- Take object and function that manipulates it
 def bind {α β} (m : TimeM α) (f : α → TimeM β) : TimeM β :=
-  let r := f m.ret -- take type, apply function
-  ⟨r.ret, m.time + r.time⟩ -- take the result of the function, and add times together
+  let r := f m.ret
+  ⟨r.ret, m.time + r.time⟩
 
--- define this to allow using lean monads?
 instance : Monad TimeM where
   pure := pure
   bind := bind
-
--- Define some helpers...
 
 -- Increment time
 @[simp] def tick {α : Type} (a : α) (c : ℕ := 1) : TimeM α :=
@@ -31,10 +28,10 @@ instance : Monad TimeM where
 
 -- We can define this notation to say "increase 1 to the running type..."
 notation "✓" a:arg ", " c:arg => tick a c
-notation "✓" a:arg => tick a  -- Default case with only one argument
+notation "✓" a:arg => tick a
 
 def tickUnit : TimeM Unit :=
-  ✓ () -- This uses the default time increment of 1
+  ✓ ()
 
 @[grind, simp] theorem time_of_pure {α} (a : α) : (pure a).time = 0 := rfl
 @[grind, simp] theorem time_of_bind {α β} (m : TimeM α) (f : α → TimeM β) :
